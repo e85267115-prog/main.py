@@ -222,9 +222,19 @@ async def cmd_setbal(message: Message, command: CommandObject):
 async def handle_ping(request): return web.Response(text="Alive")
 
 async def main():
+    # 1. Сначала пробуем создать таблицы
     await init_db()
-    dp['db_pool'] = await asyncpg.create_pool(DB_URL, ssl='disable')
     
+    # 2. Создаем пул подключений с "лекарством" от твоей ошибки
+    # Находим строку ниже и заменяем её полностью
+    dp['db_pool'] = await asyncpg.create_pool(
+        DB_URL, 
+        ssl='disable',
+        statement_cache_size=0, 
+        max_prepared_statement_size=0
+    )
+    
+    # 3. Запускаем веб-сервер для Render (чтобы он не писал No open ports)
     app = web.Application()
     app.router.add_get("/", handle_ping)
     runner = web.AppRunner(app)

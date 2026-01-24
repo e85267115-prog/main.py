@@ -4,7 +4,11 @@ import logging
 import random
 import json
 import io
+import aiohttp
 from datetime import datetime
+from pytz import timezone
+
+# Библиотеки Telegram
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
 from aiogram.client.default import DefaultBotProperties
@@ -17,16 +21,19 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
+# Планировщик для Банка (00:00 МСК)
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 # --- КОНФИГ ---
-TOKEN = os.getenv("BOT_TOKEN") # Или вставь токен сюда в кавычках
+TOKEN = os.getenv("BOT_TOKEN") 
 ADMIN_IDS = [1997428703] # Твой ID
 PORT = int(os.getenv("PORT", 8080))
 
-# Настройки Google Drive
+# Google Drive
 DRIVE_FILE_ID = "1_PdomDLZAisdVlkCwkQn02x75uoqtMWW" 
 CREDENTIALS_FILE = 'credentials.json'
 
-# Настройки каналов для подписки (ID или юзернеймы)
+# Каналы для подписки
 REQUIRED_CHANNELS = [
     {"username": "@nvibee_bet", "url": "https://t.me/nvibee_bet", "name": "Канал Vibe Bet"},
     {"username": "@chatvibee_bet", "url": "https://t.me/chatvibee_bet", "name": "Чат Vibe Bet"}
@@ -35,9 +42,10 @@ REQUIRED_CHANNELS = [
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+scheduler = AsyncIOScheduler()
 users = {}
 
-# --- GOOGLE DRIVE (АСИНХРОННО) ---
+# --- GOOGLE DRIVE & DB ---
 def get_drive_service():
     if not os.path.exists(CREDENTIALS_FILE): return None
     creds = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=['https://www.googleapis.com/auth/drive'])
@@ -46,9 +54,7 @@ def get_drive_service():
 def sync_load():
     global users
     service = get_drive_service()
-    if not service: 
-        logging.warning("Нет файла credentials.json!")
-        return
+    if not service: return
     try:
         request = service.files().get_media(fileId=DRIVE_FILE_ID)
         fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
@@ -58,8 +64,8 @@ def sync_load():
         if content:
             data = json.loads(content)
             users = {int(k): v for k, v in data.items()}
-            logging.info("✅ База данных загружена из Google Drive")
-    except Exception as e: logging.error(f"Ошибка загрузки БД: {e}")
+            logging.info("✅ БД Загружена")
+    except Exception as e: logging.error(f"DB Error: {e}")
 
 def sync_save():
     service = get_drive_service()
@@ -69,89 +75,26 @@ def sync_save():
             json.dump(users, f, ensure_ascii=False, indent=4)
         media = MediaFileUpload("db.json", mimetype='application/json', resumable=True)
         service.files().update(fileId=DRIVE_FILE_ID, media_body=media).execute()
-    except Exception as e: logging.error(f"Ошибка сохранения БД: {e}")
+    except Exception as e: logging.error(f"Save Error: {e}")
 
 async def save_data():
-    # Сохраняем в отдельном потоке, чтобы бот летал
     await asyncio.to_thread(sync_save)
 
-# --- ПРОВЕРКА ПОДПИСКИ (MIDDLEWARE) ---
-async def check_subscription(user_id):
-    not_subbed = []
-    for channel in REQUIRED_CHANNELS:
-        try:
-            member = await bot.get_chat_member(chat_id=channel["username"], user_id=user_id)
-            if member.status in ["left", "kicked"]:
-                not_subbed.append(channel)
-        except Exception as e:
-            # Если бот не админ, он не сможет проверить. Считаем, что не подписан, или логируем ошибку
-            logging.error(f"Ошибка проверки подписки {channel['username']}: {e}")
-            not_subbed.append(channel)
-    return not_subbed
-
-@dp.message.outer_middleware()
-async def sub_middleware(handler, event: Message, data):
-    # Пропускаем команду старт, чтобы показать приветствие, но блокируем действия
-    if event.text and event.text.startswith("/start"):
-        return await handler(event, data)
-    
-    # Исключаем админов из проверки, чтобы ты мог тестить спокойно
-    if event.from_user.id in ADMIN_IDS:
-        return await handler(event, data)
-
-    not_subbed = await check_subscription(event.from_user.id)
-    
-    if not_subbed:
-        # Генерируем клавиатуру
-        keyboard = []
-        for ch in not_subbed:
-            keyboard.append([InlineKeyboardButton(text=f"👉 Подписаться: {ch['name']}", url=ch['url'])])
-        
-        # Кнопка проверки
-        keyboard.append([InlineKeyboardButton(text="✅ Я ПОДПИСАЛСЯ", callback_data="check_sub_btn")])
-        
-        await event.answer(
-            "🔒 <b>ДОСТУП ЗАКРЫТ!</b>\n\n"
-            "Для игры в <b>Vibe Bet</b> необходимо быть подписанным на наши ресурсы:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-        )
-        return # Прерываем обработку
-    
-    return await handler(event, data)
-
-@dp.callback_query(F.data == "check_sub_btn")
-async def callback_check_sub(call: CallbackQuery):
-    not_subbed = await check_subscription(call.from_user.id)
-    if not not_subbed:
-        await call.message.delete()
-        await call.message.answer("✅ <b>Спасибо! Доступ открыт.</b>\nЖми /start или пиши <b>Профиль</b>")
-    else:
-        await call.answer("❌ Вы подписались не на все каналы!", show_alert=True)
-
-# --- UTILS ---
-def get_user(uid, name="Игрок"):
-    if uid not in users:
-        users[uid] = {
-            "name": name, "balance": 10000, "bank": 0, "btc": 0.0, 
-            "lvl": 1, "xp": 0, "banned": False, 
-            "shovel": 0, "detector": 0, "last_work": 0, "last_bonus": 0
-        }
-        asyncio.create_task(save_data())
-    return users[uid]
-
+# --- UTILS (ФОРМАТИРОВАНИЕ) ---
 def format_num(num):
     try:
         num = float(num)
         if num < 1000: return str(int(num))
-        if num < 1_000_000: return f"{num/1000:.1f}к"
-        if num < 1_000_000_000: return f"{num/1_000_000:.1f}кк"
-        return f"{num/1_000_000_000:.1f}ккк"
+        if num < 1_000_000: return f"{num/1000:.2f}к" # 1.05к
+        if num < 1_000_000_000: return f"{num/1_000_000:.2f}кк"
+        if num < 1_000_000_000_000: return f"{num/1_000_000_000:.2f}ккк"
+        return f"{num/1_000_000_000_000:.2f}кккк"
     except: return "0"
 
 def parse_amount(text, balance):
     text = str(text).lower().replace(",", ".")
     if text in ["все", "всё", "all"]: return int(balance)
-    m = {"к": 1000, "кк": 1000000, "ккк": 1000000000}
+    m = {"к": 1000, "кк": 1000000, "ккк": 1000000000, "кккк": 1000000000000}
     for k, v in m.items():
         if text.endswith(k):
             try: return int(float(text.replace(k, "")) * v)
@@ -159,252 +102,420 @@ def parse_amount(text, balance):
     try: return int(float(text))
     except: return None
 
-async def add_xp_logic(message, u, amount):
-    u['xp'] += amount
-    needed = u['lvl'] * 10
-    if u['xp'] >= needed:
-        u['lvl'] += 1; u['xp'] = 0
-        await message.answer(f"🆙 <b>LEVEL UP!</b>\nТеперь у тебя <b>{u['lvl']} уровень</b>!")
+def get_user(uid, name="Игрок"):
+    if uid not in users:
+        users[uid] = {
+            "name": name, "balance": 10000, "bank": 0, "btc": 0.0, 
+            "lvl": 1, "xp": 0, "banned": False, 
+            "shovel": 0, "detector": 0, "last_work": 0
+        }
+        asyncio.create_task(save_data())
+    return users[uid]
 
-# --- COMMANDS ---
+async def get_btc_price():
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd") as resp:
+                data = await resp.json()
+                return data['bitcoin']['usd']
+    except: return 95000 # Если API упал
+
+# --- БАНКОВСКАЯ ЗАДАЧА (00:00 MSK) ---
+async def bank_interest_job():
+    logging.info("⏳ Начисление процентов в банке...")
+    count = 0
+    for uid, u in users.items():
+        if u.get('bank', 0) > 0:
+            interest = int(u['bank'] * 0.10) # 10%
+            u['bank'] += interest
+            count += 1
+    if count > 0:
+        await save_data()
+        logging.info(f"✅ Проценты начислены {count} пользователям.")
+
+# --- MIDDLEWARE (ПОДПИСКА + БАН) ---
+@dp.message.outer_middleware()
+async def check_access(handler, event: Message, data):
+    if not isinstance(event, Message): return await handler(event, data) # Пропуск для колбэков, если нужно
+    
+    uid = event.from_user.id
+    u = get_user(uid, event.from_user.first_name)
+    
+    # 1. Проверка Бана
+    if u.get('banned'):
+        return # Игнор
+
+    # 2. Проверка Подписки (кроме админа и старта)
+    if uid not in ADMIN_IDS and not event.text.startswith("/start"):
+        not_subbed = []
+        for ch in REQUIRED_CHANNELS:
+            try:
+                m = await bot.get_chat_member(chat_id=ch["username"], user_id=uid)
+                if m.status in ["left", "kicked"]: not_subbed.append(ch)
+            except: pass # Бот не админ
+            
+        if not_subbed:
+            kb = [[InlineKeyboardButton(text=f"👉 {ch['name']}", url=ch['url'])] for ch in not_subbed]
+            kb.append([InlineKeyboardButton(text="✅ Я ПОДПИСАЛСЯ", callback_data="check_sub")])
+            return await event.answer("🔒 <b>Подпишись для игры:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+            
+    return await handler(event, data)
+
+@dp.callback_query(F.data == "check_sub")
+async def sub_check_call(call: CallbackQuery):
+    await call.message.delete()
+    await call.message.answer("🔄 Проверьте снова командой /start")
+
+# --- КОМАНДЫ ПОЛЬЗОВАТЕЛЯ ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    # Сначала проверяем подписку, даже на старте
-    if message.from_user.id not in ADMIN_IDS:
-        not_subbed = await check_subscription(message.from_user.id)
-        if not_subbed:
-            keyboard = [[InlineKeyboardButton(text=f"👉 {ch['name']}", url=ch['url'])] for ch in not_subbed]
-            keyboard.append([InlineKeyboardButton(text="✅ Я ПОДПИСАЛСЯ", callback_data="check_sub_btn")])
-            return await message.answer("👋 Привет! Чтобы начать, подпишись на нас:", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
-
     u = get_user(message.from_user.id, message.from_user.first_name)
-    
-    # Работа с картинкой
-    photo_file = FSInputFile("start_img.jpg")
-    
-    caption_text = (
-        f"👋 <b>Добро Пожаловать в Vibe Bet!</b>\n\n"
-        f"Игровой телеграм бот. Играй, веселись, все это ТУТ!\n\n"
-        f"👤 Игрок: <b>{u['name']}</b>\n"
-        f"💰 Баланс: <b>{format_num(u['balance'])} $</b>\n\n"
-        f"👇 <b>Меню команд:</b>\n"
-        f"• <code>Профиль</code> — Твоя статистика\n"
-        f"• <code>Работа</code> — Заработать денег\n"
-        f"• <code>Рул [сумма] [цвет]</code> — Рулетка\n"
-        f"• <code>Краш [сумма] [кэф]</code> — Краш\n"
-        f"• <code>Магазин</code> — Купить инструменты"
+    photo = FSInputFile("start_img.jpg")
+    txt = (
+        "👋 <b>Добро Пожаловать в Vibe Bet!</b>\n\n"
+        "Игровой телеграм бот. Играй, веселись, все это ТУТ!\n\n"
+        "⚙️ Используй кнопки меню или напиши <b>Помощь</b>"
     )
-    
-    try:
-        await message.answer_photo(photo=photo_file, caption=caption_text)
-    except Exception as e:
-        await message.answer(caption_text) # Если фото не нашли, шлем текст
-        logging.error(f"Не удалось отправить фото: {e}")
+    try: await message.answer_photo(photo, caption=txt)
+    except: await message.answer(txt)
 
-@dp.message(F.text.lower().in_({"профиль", "стата", "profile"}))
+@dp.message(F.text.lower() == "помощь")
+async def cmd_help(message: Message):
+    txt = (
+        "📚 <b>СПИСОК КОМАНД:</b>\n\n"
+        "👤 <b>Основное:</b>\n"
+        "• <code>Профиль</code> (или 'Я') — Статистика\n"
+        "• <code>Магазин</code> — Инструменты\n"
+        "• <code>Работа</code> — Мини-игра (Клад)\n"
+        "• <code>Рынок</code> — Курс Биткоина\n\n"
+        "💸 <b>Финансы:</b>\n"
+        "• <code>Банк</code> — Твой счет\n"
+        "• <code>Деп [сумма]</code> — Положить в банк\n"
+        "• <code>Снять [сумма]</code> — Снять из банка\n"
+        "• <code>Перевести [ID] [сумма]</code> — Другу\n\n"
+        "🎰 <b>Игры:</b>\n"
+        "• <code>Рул [сумма] [цвет]</code>\n"
+        "• <code>Краш [сумма] [кэф]</code>"
+    )
+    await message.answer(txt)
+
+@dp.message(F.text.lower().in_({"профиль", "я", "стата"}))
 async def cmd_profile(message: Message):
-    u = get_user(message.from_user.id, message.from_user.first_name)
+    u = get_user(message.from_user.id)
     needed = u['lvl'] * 10
-    text = (
-        f"👤 <b>ЛИЧНЫЙ КАБИНЕТ: {u['name']}</b>\n"
-        f"➖➖➖➖➖➖➖➖➖➖\n"
-        f"💵 Деньги: <b>{format_num(u['balance'])} $</b>\n"
-        f"🏦 В банке: <b>{format_num(u['bank'])} $</b>\n"
-        f"🪙 Crypto: <b>{u['btc']:.6f} BTC</b>\n"
-        f"➖➖➖➖➖➖➖➖➖➖\n"
+    
+    # Считаем инструменты для отображения "Инструментов 2/2"
+    tools_count = 0
+    if u['shovel'] > 0: tools_count += 1
+    if u['detector'] > 0: tools_count += 1
+    
+    txt = (
+        f"👤 <b>ТВОЙ ПРОФИЛЬ</b>\n"
+        f"➖➖➖➖➖➖➖➖\n"
+        f"💰 На руках: <b>{format_num(u['balance'])} $</b>\n"
+        f"🪙 Биткоины: <b>{u['btc']:.6f} BTC</b>\n"
         f"⭐ Уровень: <b>{u['lvl']}</b>\n"
         f"📊 Опыт: <b>{u['xp']} / {needed} XP</b>\n"
-        f"🆔 ID: <code>{message.from_user.id}</code>"
+        f"➖➖➖➖➖➖➖➖\n"
+        f"🎒 Инструментов: <b>{tools_count}/2</b>"
     )
-    await message.answer(text)
+    await message.answer(txt)
 
-@dp.message(F.text.lower().startswith("рул"))
-async def cmd_roulette(message: Message):
+# --- БАНК И ПЕРЕВОДЫ ---
+@dp.message(F.text.lower() == "банк")
+async def cmd_bank(message: Message):
     u = get_user(message.from_user.id)
-    args = message.text.split()
-    
-    if len(args) < 3:
-        return await message.answer("⚠️ <b>Использование:</b>\n<code>рул 100к черный</code>\n<code>рул все красный</code>")
-    
-    try:
-        amt = parse_amount(args[1], u['balance'])
-        col = args[2].lower()
-        if amt is None or amt <= 0 or amt > u['balance']: raise ValueError
-    except:
-        return await message.answer("❌ <b>Ошибка!</b> Неверная сумма или недостаточно средств.")
-
-    u['balance'] -= amt
-    res_num = random.randint(0, 36)
-    
-    # Определение цвета выпавшего числа
-    if res_num == 0: win_col = "зеленый"
-    elif res_num in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]: win_col = "красный"
-    else: win_col = "черный"
-    
-    win_amt = 0
-    # Логика выигрыша
-    if (col.startswith("чер") and win_col == "черный") or (col.startswith("кра") and win_col == "красный"):
-        win_amt = amt * 2
-    elif col.startswith("зел") and win_col == "зеленый":
-        win_amt = amt * 14
-
-    u['balance'] += win_amt
-    
-    xp_text = ""
-    # 30% ШАНС НА ОПЫТ
-    if random.random() < 0.30:
-        await add_xp_logic(message, u, 1)
-        xp_text = "\n🔥 <b>+1 XP</b>"
-    
-    asyncio.create_task(save_data())
-    
-    if win_amt > 0:
-        res_text = f"✅ <b>ПОБЕДА!</b>\n💸 Выиграно: <b>{format_num(win_amt)} $</b>"
-    else:
-        res_text = f"❌ <b>ПРОИГРЫШ...</b>"
-
     await message.answer(
-        f"🎰 <b>VIBE CASINO</b>\n"
-        f"🎲 Выпало: <b>{res_num} {win_col.upper()}</b>\n"
-        f"{res_text}\n"
-        f"💰 Баланс: <b>{format_num(u['balance'])}$</b>{xp_text}"
+        f"🏦 <b>VIBE BANK</b>\n\n"
+        f"💳 На счете: <b>{format_num(u['bank'])} $</b>\n"
+        f"📈 Ставка: <b>10% в день</b> (в 00:00 МСК)\n\n"
+        f"↘️ <code>Деп [сумма]</code>\n"
+        f"↙️ <code>Снять [сумма]</code>"
     )
 
-@dp.message(F.text.lower().startswith("краш"))
-async def cmd_crash(message: Message):
+@dp.message(F.text.lower().startswith("деп"))
+async def cmd_deposit(message: Message):
+    u = get_user(message.from_user.id)
+    try:
+        amt = parse_amount(message.text.split()[1], u['balance'])
+        if amt <= 0 or amt > u['balance']: raise ValueError
+        u['balance'] -= amt; u['bank'] += amt
+        await save_data()
+        await message.answer(f"✅ В банк положено: <b>{format_num(amt)} $</b>")
+    except: await message.answer("❌ Ошибка суммы.")
+
+@dp.message(F.text.lower().startswith("снять"))
+async def cmd_withdraw(message: Message):
+    u = get_user(message.from_user.id)
+    try:
+        amt = parse_amount(message.text.split()[1], u['bank'])
+        if amt <= 0 or amt > u['bank']: raise ValueError
+        u['bank'] -= amt; u['balance'] += amt
+        await save_data()
+        await message.answer(f"✅ Из банка снято: <b>{format_num(amt)} $</b>")
+    except: await message.answer("❌ Ошибка суммы.")
+
+@dp.message(F.text.lower().startswith("перевести"))
+async def cmd_transfer(message: Message):
+    # перевести ID СУММА
     u = get_user(message.from_user.id)
     args = message.text.split()
-    
-    if len(args) < 3:
-        return await message.answer("⚠️ <b>Использование:</b>\n<code>краш 50к 1.5</code>")
+    try:
+        target_id = int(args[1])
+        amt = parse_amount(args[2], u['balance'])
         
-    try:
-        amt = parse_amount(args[1], u['balance'])
-        target_mult = float(args[2].replace(",", "."))
-        if amt is None or amt <= 0 or amt > u['balance']: raise ValueError
-        if target_mult < 1.01: return await message.answer("❌ Минимальный кэф 1.01")
-    except:
-        return await message.answer("❌ Неверные данные.")
+        if target_id not in users: return await message.answer("❌ Игрок не найден.")
+        if target_id == message.from_user.id: return await message.answer("❌ Себе нельзя.")
+        if amt <= 0 or amt > u['balance']: return await message.answer("❌ Не хватает денег.")
+        
+        u['balance'] -= amt
+        users[target_id]['balance'] += amt
+        await save_data()
+        
+        await message.answer(f"💸 Перевод <b>{format_num(amt)} $</b> игроку {target_id} успешен.")
+        try: await bot.send_message(target_id, f"📩 Вам перевели <b>{format_num(amt)} $</b>")
+        except: pass
+    except: await message.answer("⚠️ Пиши: <code>Перевести ID Сумма</code>")
 
-    u['balance'] -= amt
-    # Генерируем краш (имитация)
-    crash_point = round(random.uniform(1.0, 5.0), 2)
-    if random.random() < 0.1: crash_point = round(random.uniform(1.0, 1.15), 2) # Часто бреем на низких
+# --- РЫНОК ---
+@dp.message(F.text.lower() == "рынок")
+async def cmd_market(message: Message):
+    price = await get_btc_price()
+    u = get_user(message.from_user.id)
+    val_usd = u['btc'] * price
     
-    win_amt = 0
-    if target_mult <= crash_point:
-        win_amt = int(amt * target_mult)
-        u['balance'] += win_amt
-        res_text = f"🚀 <b>ЗАБРАЛ!</b> (x{target_mult})\n💸 Приз: <b>{format_num(win_amt)} $</b>"
-    else:
-        res_text = f"💥 <b>КРАШНУЛОСЬ!</b>"
-
-    xp_text = ""
-    if random.random() < 0.30:
-        await add_xp_logic(message, u, 1)
-        xp_text = "\n🔥 <b>+1 XP</b>"
-
-    asyncio.create_task(save_data())
     await message.answer(
-        f"📉 <b>CRASH GAME</b>\n"
-        f"🛑 Стоп: <b>{crash_point}x</b>\n"
-        f"{res_text}\n"
-        f"💰 Баланс: <b>{format_num(u['balance'])}$</b>{xp_text}"
+        f"📊 <b>CRYPTO MARKET</b>\n\n"
+        f"🔸 BTC Price: <b>{format_num(price)} $</b>\n"
+        f"💼 Твой портфель: <b>{u['btc']:.6f} BTC</b>\n"
+        f"💵 Оценка: <b>~{format_num(val_usd)} $</b>"
     )
 
+# --- РАБОТА (КЛАДОИСКАТЕЛЬ) ---
 @dp.message(F.text.lower().in_({"работа", "work"}))
-async def cmd_work(message: Message):
+async def cmd_work_start(message: Message):
     u = get_user(message.from_user.id)
-    now = datetime.now().timestamp()
     
-    if now - u.get('last_work', 0) < 600:
-        rem_min = int((600 - (now - u['last_work'])) // 60)
-        rem_sec = int((600 - (now - u['last_work'])) % 60)
-        return await message.answer(f"⏳ <b>Устал?</b> Отдохни еще {rem_min} мин {rem_sec} сек.")
-    
-    if u['shovel'] <= 0 or u['detector'] <= 0:
-        return await message.answer("🛠 <b>Нет инструментов!</b>\nКупи лопату и детектор в <code>Магазин</code>")
+    # Проверка инструментов (нужны оба, максимум по 1)
+    if u['shovel'] < 1 or u['detector'] < 1:
+        return await message.answer("❌ Нужна <b>Лопата</b> и <b>Детектор</b>!\nКупи в магазине.")
 
-    u['shovel'] -= 1; u['detector'] -= 1
+    # Проверка КД (10 минут)
+    now = datetime.now().timestamp()
+    if now - u['last_work'] < 600:
+        rem = int(600 - (now - u['last_work']))
+        return await message.answer(f"⏳ Отдыхай еще {rem // 60} мин {rem % 60} сек")
+
+    # Старт мини-игры
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🏜️", callback_data="dig_1"),
+            InlineKeyboardButton(text="🏚️", callback_data="dig_2"),
+            InlineKeyboardButton(text="🏝️", callback_data="dig_3")
+        ]
+    ])
+    await message.answer("🗺️ <b>Где будем копать?</b>\nВыбери место, где спрятан клад:", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("dig_"))
+async def work_process(call: CallbackQuery):
+    u = get_user(call.from_user.id)
+    # Повторная проверка КД (чтобы не кликали)
+    now = datetime.now().timestamp()
+    if now - u['last_work'] < 600: 
+        return await call.answer("⏳ Рано!", show_alert=True)
+    
     u['last_work'] = now
     
-    money = random.randint(5000, 25000) * u['lvl'] # Чем выше лвл, тем больше денег
-    u['balance'] += money
+    # Логика награды (10к - 3кк)
+    # Шанс на крупный выигрыш растет с уровнем
+    chance_big = 0.05 + (u['lvl'] * 0.01) # 5% + 1% за уровень
+    if chance_big > 0.30: chance_big = 0.30 # Кап 30%
     
-    msg = f"⛏ <b>РАБОТА ЗАВЕРШЕНА</b>\n💰 Заработано: <b>{format_num(money)} $</b>\n📉 Инструменты потрачены."
+    if random.random() < chance_big:
+        # КРУПНЫЙ КУШ
+        win = random.randint(500_000, 3_000_000)
+        emoji = "💎"
+        msg = "<b>ЛЕГЕНДАРНЫЙ КЛАД!</b>"
+    else:
+        # ОБЫЧНЫЙ
+        win = random.randint(10_000, 100_000)
+        emoji = "💰"
+        msg = "Неплохой улов!"
     
-    # 30% шанс на опыт
-    if random.random() < 0.30:
-        xp = random.randint(1, 3)
-        await add_xp_logic(message, u, xp)
-        msg += f"\n🔥 Получено: <b>+{xp} XP</b>"
+    # Иногда инструмент ломается (10% шанс) - хотя пользователь просил по 1 шт
+    # Раз просили ограничение 1/1, сделаем инструменты вечными или пусть ломаются? 
+    # Сделаем вечными, раз покупка лимитирована 1 шт. Или пусть покупает заново.
+    # Давайте пусть ломаются редко (5%)
+    broken = ""
+    if random.random() < 0.05:
+        if random.random() < 0.5:
+            u['shovel'] = 0; broken = "\n💥 <b>Лопата сломалась!</b>"
+        else:
+            u['detector'] = 0; broken = "\n💥 <b>Детектор сломался!</b>"
 
-    asyncio.create_task(save_data())
-    await message.answer(msg)
+    u['balance'] += win
+    
+    # Опыт
+    xp = random.randint(2, 5)
+    u['xp'] += xp
+    xp_msg = f"+{xp} XP"
+    
+    # Проверка уровня
+    if u['xp'] >= u['lvl'] * 10:
+        u['lvl'] += 1; u['xp'] = 0
+        xp_msg += f" | 🆙 <b>LVL {u['lvl']}</b>"
 
+    await save_data()
+    await call.message.edit_text(
+        f"{emoji} {msg}\n"
+        f"💵 Выкопано: <b>{format_num(win)} $</b>\n"
+        f"📊 Опыт: {xp_msg}"
+        f"{broken}"
+    )
+
+# --- МАГАЗИН ---
 @dp.message(F.text.lower() == "магазин")
 async def cmd_shop(message: Message):
+    u = get_user(message.from_user.id)
+    
+    # Считаем
+    has_shovel = "✅" if u['shovel'] > 0 else "❌"
+    has_detect = "✅" if u['detector'] > 0 else "❌"
+    count = (1 if u['shovel'] > 0 else 0) + (1 if u['detector'] > 0 else 0)
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⛏ Лопата (50к)", callback_data="buy_shovel")],
-        [InlineKeyboardButton(text="📡 Детектор (100к)", callback_data="buy_detector")]
+        [InlineKeyboardButton(text="Лопата (50к)", callback_data="buy_shovel")],
+        [InlineKeyboardButton(text="Детектор (100к)", callback_data="buy_detector")]
     ])
-    await message.answer("🏪 <b>VIBE SHOP</b>\nИнструменты нужны для работы.", reply_markup=kb)
+    
+    await message.answer(
+        f"🏪 <b>VIBE SHOP</b>\n\n"
+        f"1. Лопата: {has_shovel}\n"
+        f"2. Детектор: {has_detect}\n\n"
+        f"🎒 Инструментов: <b>{count}/2</b>\n"
+        f"<i>(Можно иметь только по 1 шт)</i>",
+        reply_markup=kb
+    )
 
 @dp.callback_query(F.data.startswith("buy_"))
-async def buy_item(call: CallbackQuery):
+async def shop_buy(call: CallbackQuery):
     u = get_user(call.from_user.id)
     item = call.data.split("_")[1]
     
+    # Проверка наличия
+    if u.get(item, 0) >= 1:
+        return await call.answer("⚠️ У вас уже есть этот предмет!", show_alert=True)
+        
     price = 50000 if item == "shovel" else 100000
-    name = "Лопату" if item == "shovel" else "Детектор"
-    
     if u['balance'] < price:
-        return await call.answer("❌ Недостаточно денег!", show_alert=True)
+        return await call.answer("❌ Не хватает денег!", show_alert=True)
         
     u['balance'] -= price
-    u[item] = u.get(item, 0) + 5 # Даем 5 зарядов
-    asyncio.create_task(save_data())
-    
-    await call.message.edit_text(f"✅ Вы купили <b>{name}</b> (5 шт.)\n💰 Остаток: {format_num(u['balance'])}")
+    u[item] = 1 # Ставим 1, так как ограничение
+    await save_data()
+    await call.answer("✅ Куплено!")
+    await call.message.delete()
+    await cmd_shop(call.message) # Обновляем меню
 
-# --- АДМИН ПАНЕЛЬ ---
-@dp.message(F.text.lower().startswith("выдать"))
-async def adm_give(message: Message):
+# --- АДМИН КОМАНДЫ ---
+@dp.message(F.text.lower().startswith("выдатьбтк"))
+async def adm_give_btc(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
     try:
-        # Формат: выдать ID СУММА
+        _, uid, amt = message.text.split()
+        uid = int(uid); amt = float(amt.replace(",", "."))
+        get_user(uid)['btc'] += amt
+        await save_data()
+        await message.answer(f"✅ Выдано {amt} BTC игроку {uid}")
+    except: await message.answer("Ошибка")
+
+@dp.message(F.text.lower().startswith("выдать"))
+async def adm_give_money(message: Message):
+    if message.from_user.id not in ADMIN_IDS: return
+    try:
         parts = message.text.split()
-        target_id = int(parts[1])
-        amount = parse_amount(parts[2], 0)
-        
-        user = get_user(target_id)
-        user['balance'] += amount
-        asyncio.create_task(save_data())
-        
-        await message.answer(f"✅ Админ {message.from_user.first_name} выдал {format_num(amount)}$ игроку {target_id}")
-        # Опционально: уведомить игрока
-        try: await bot.send_message(target_id, f"🎁 <b>АДМИН ПОПОЛНИЛ ВАШ БАЛАНС:</b> +{format_num(amount)}$")
-        except: pass
-    except Exception as e:
-        await message.answer(f"❌ Ошибка команды: {e}")
+        uid = int(parts[1])
+        amt = parse_amount(parts[2], 0)
+        get_user(uid)['balance'] += amt
+        await save_data()
+        await message.answer(f"✅ Выдано {format_num(amt)}$ игроку {uid}")
+    except: await message.answer("Ошибка")
 
 @dp.message(F.text.lower().startswith("бан"))
 async def adm_ban(message: Message):
     if message.from_user.id not in ADMIN_IDS: return
     try:
-        target_id = int(message.text.split()[1])
-        get_user(target_id)['banned'] = True
-        asyncio.create_task(save_data())
-        await message.answer(f"🚫 Игрок {target_id} забанен.")
+        uid = int(message.text.split()[1])
+        get_user(uid)['banned'] = True
+        await save_data()
+        await message.answer(f"🚫 Игрок {uid} забанен")
     except: pass
 
-# --- WEB SERVER ---
-async def handle_ping(request): return web.Response(text="Vibe Bet Bot is Alive!")
+@dp.message(F.text.lower().startswith("разбан"))
+async def adm_unban(message: Message):
+    if message.from_user.id not in ADMIN_IDS: return
+    try:
+        uid = int(message.text.split()[1])
+        get_user(uid)['banned'] = False
+        await save_data()
+        await message.answer(f"✅ Игрок {uid} разбанен")
+    except: pass
+
+# --- СТАРЫЕ ИГРЫ (КРАШ И РУЛЕТКА) ---
+@dp.message(F.text.lower().startswith("рул"))
+async def cmd_roulette(message: Message):
+    u = get_user(message.from_user.id)
+    args = message.text.split()
+    try:
+        amt = parse_amount(args[1], u['balance'])
+        col = args[2].lower()
+        if amt <= 0 or amt > u['balance']: raise ValueError
+    except: return await message.answer("❌ Ставка не верна")
+
+    u['balance'] -= amt
+    res_num = random.randint(0, 36)
+    win_col = "зеленый" if res_num == 0 else "красный" if res_num in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "черный"
+    
+    win_amt = 0
+    if (col.startswith("чер") and win_col == "черный") or (col.startswith("кра") and win_col == "красный"): win_amt = amt * 2
+    elif col.startswith("зел") and win_col == "зеленый": win_amt = amt * 14
+
+    u['balance'] += win_amt
+    await save_data()
+    status = f"🎉 ВЫИГРЫШ: {format_num(win_amt)} $" if win_amt > 0 else "😔 ПРОИГРЫШ"
+    await message.answer(f"🎰 {status}\n📈 Выпало: {res_num} ({win_col})\n💰 Баланс: {format_num(u['balance'])}")
+
+@dp.message(F.text.lower().startswith("краш"))
+async def cmd_crash(message: Message):
+    u = get_user(message.from_user.id); args = message.text.split()
+    try:
+        amt = parse_amount(args[1], u['balance'])
+        mult = float(args[2].replace(",", "."))
+        if amt <= 0 or amt > u['balance'] or mult < 1.01: raise ValueError
+    except: return await message.answer("❌ Ставка не верна")
+
+    u['balance'] -= amt
+    crash_point = round(random.uniform(1.0, 4.0), 2)
+    win = 0
+    if mult <= crash_point:
+        win = int(amt * mult)
+        u['balance'] += win
+        res = f"🎉 Выигрыш! (x{mult})"
+    else: res = "😔 Крашнулось!"
+    
+    await save_data()
+    await message.answer(f"🚀 {res}\n📈 Точка: {crash_point}x\n💸 Приз: {format_num(win)} $\n💰 Баланс: {format_num(u['balance'])}")
+
+# --- ЗАПУСК ---
+async def handle_ping(request): return web.Response(text="OK")
 
 async def main():
-    # Предзагрузка базы
     await asyncio.to_thread(sync_load)
+    
+    # Настройка планировщика (Банк)
+    scheduler.add_job(bank_interest_job, 'cron', hour=0, minute=0, timezone=timezone('Europe/Moscow'))
+    scheduler.start()
     
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -413,11 +524,7 @@ async def main():
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
     
     await bot.delete_webhook(drop_pending_updates=True)
-    logging.info("🚀 БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Бот остановлен")
+    asyncio.run(main())

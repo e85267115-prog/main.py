@@ -186,12 +186,13 @@ async def main():
         raise RuntimeError("DATABASE_URL не задан")
 
     dp['db_pool'] = await asyncpg.create_pool(
-        DB_URL,
-        min_size=1,
-        max_size=10,
-        statement_cache_size=0,
-        max_cacheable_statement_size=0
-    )
+    DB_URL,
+    min_size=1,
+    max_size=5,  # лучше меньше для pooler
+    statement_cache_size=0,
+    max_cacheable_statement_size=0
+)
+
 
     await init_db(dp['db_pool'])
 

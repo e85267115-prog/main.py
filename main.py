@@ -25,7 +25,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 # ТВОЙ ID ФАЙЛА (оставляем тот же)
-DRIVE_FILE_ID = "1UnFcRsQH59-j2dv_6KSR0lNkSFvERoBfphOtqO2amy0" 
+DRIVE_FILE_ID = "1_PdomDLZAisdVlkCwkQn02x75uoqtMWW" 
 CREDENTIALS_FILE = 'credentials.json'
 
 CHANNEL_ID = "@nvibee_bet"

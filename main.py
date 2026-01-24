@@ -32,7 +32,7 @@ CHANNEL_URL = "https://t.me/nvibee_bet"
 CHAT_URL = "https://t.me/chatvibee_bet"
 
 # ⚠️ ВПИШИ СЮДА СВОЙ TELEGRAM ID (числом), ЧТОБЫ РАБОТАЛА АДМИНКА
-ADMIN_IDS = [1997428703] 
+ADMIN_IDS = [123456789, 987654321] 
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -540,4 +540,121 @@ async def admin_unban(message: Message):
         await message.answer(f"✅ Игрок {target_id} разбанен!")
         logging.info(f"ADMIN: {message.from_user.id} разбанил {target_id}")
     except: await message.answer("❌ Формат: разбан [ID]")
+        @dp.message(F.text.lower().startswith("выдатьбит"))
+async def admin_give_btc(message: Message):
+    if not is_admin(message.from_user.id): return
+    try:
+        args = message.text.split()
+        target_id = int(args[1])
+        amount = float(args[2].replace(",", "."))
+        if target_id not in users: return await message.answer("❌ Нет в БД")
+        
+        users[target_id]['btc'] += amount
+        save_data()
+        await message.answer(f"💳 Выдано {amount} BTC игроку {target_id}")
+        await bot.send_message(target_id, f"💳 Администратор выдал вам <b>{amount} BTC</b>")
+        logging.info(f"ADMIN: {message.from_user.id} выдал BTC {amount} игроку {target_id}")
+    except: await message.answer("❌ Формат: выдатьбит [ID] [сумма]")
+
+@dp.message(F.text.lower().startswith("выдать"))
+async def admin_give_money(message: Message):
+    if not is_admin(message.from_user.id): return
+    try:
+        args = message.text.split()
+        target_id = int(args[1])
+        # Здесь нельзя использовать parse_amount с балансом юзера, так как админ выдает из воздуха
+        # Парсим вручную
+        txt = args[2].lower()
+        mult = 1
+        if txt.endswith("к"): mult = 1000; txt = txt[:-1]
+        elif txt.endswith("кк"): mult = 10**6; txt = txt[:-2]
+        elif txt.endswith("ккк"): mult = 10**9; txt = txt[:-3]
+        
+        amount = int(float(txt) * mult)
+        
+        if target_id not in users: return await message.answer("❌ Нет в БД")
+        
+        users[target_id]['balance'] += amount
+        save_data()
+        await message.answer(f"💳 Выдано {format_num(amount)} $ игроку {target_id}")
+        await bot.send_message(target_id, f"💳 Администратор выдал вам <b>{format_num(amount)} $</b>")
+        logging.info(f"ADMIN: {message.from_user.id} выдал {amount} игроку {target_id}")
+    except Exception as e: await message.answer(f"❌ Формат: выдать [ID] [сумма] ({e})")
+
+@dp.message(F.text.lower().startswith("забрать"))
+async def admin_take_money(message: Message):
+    if not is_admin(message.from_user.id): return
+    try:
+        args = message.text.split()
+        target_id = int(args[1])
+        # Парсим сумму
+        txt = args[2].lower()
+        mult = 1
+        if txt.endswith("к"): mult = 1000; txt = txt[:-1]
+        elif txt.endswith("кк"): mult = 10**6; txt = txt[:-2]
+        
+        amount = int(float(txt) * mult)
+        
+        if target_id not in users: return await message.answer("❌ Нет в БД")
+        
+        users[target_id]['balance'] -= amount
+        if users[target_id]['balance'] < 0: users[target_id]['balance'] = 0
+        save_data()
+        await message.answer(f"🗑 Забрано {format_num(amount)} $ у игрока {target_id}")
+        await bot.send_message(target_id, f"🗑 Администратор забрал у вас <b>{format_num(amount)} $</b>")
+        logging.info(f"ADMIN: {message.from_user.id} забрал {amount} у {target_id}")
+    except: await message.answer("❌ Формат: забрать [ID] [сумма]")
+
+@dp.message(F.text.lower() == "админ")
+async def admin_help(message: Message):
+    if not is_admin(message.from_user.id): return
+    text = (
+        "👮‍♂️ <b>АДМИН ПАНЕЛЬ</b>\n"
+        "• <code>бан [ID]</code>\n"
+        "• <code>разбан [ID]</code>\n"
+        "• <code>выдать [ID] [сумма]</code>\n"
+        "• <code>забрать [ID] [сумма]</code>\n"
+        "• <code>выдатьбит [ID] [сумма]</code>\n"
+        "Логи пишутся в консоль сервера."
+    )
+    await message.answer(text)
+
+@dp.message(F.text.lower().in_({"помощь", "help", "команды"}))
+async def cmd_help(message: Message):
+    text = (
+        "🎮 <b>СПИСОК КОМАНД:</b>\n\n"
+        "💼 <b>РАБОТА:</b>\n"
+        "• <code>работа</code> — Искать клад\n"
+        "• <code>магазин</code> — Купить инструменты\n\n"
+        "🏦 <b>ФИНАНСЫ:</b>\n"
+        "• <code>банк</code> — Меню банка\n"
+        "• <code>деп [сумма]</code> — Положить в банк\n"
+        "• <code>снять [сумма]</code> — Снять из банка\n"
+        "• <code>перевести [id] [сумма]</code> — Перевод игроку\n\n"
+        "🎰 <b>ИГРЫ:</b>\n"
+        "• <code>рул [сумма] [цвет]</code> — Рулетка (кра/чер/зел)\n"
+        "• <code>краш [сумма] [кэф]</code> — Краш (мин кэф 1.01)\n\n"
+        "👤 <b>Профиль</b> — Статистика"
+    )
+    await message.answer(text)
+
+# --- SERVER ---
+async def handle_ping(request): return web.Response(text="Bot Alive")
+
+async def main():
+    load_data()
+    msk_tz = pytz.timezone('Europe/Moscow')
+    scheduler.add_job(bank_interest_task, 'cron', hour=0, minute=0, timezone=msk_tz)
+    scheduler.start()
     
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", PORT).start()
+    
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())

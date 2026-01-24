@@ -22,7 +22,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 DRIVE_FILE_ID = "1_PdomDLZAisdVlkCwkQn02x75uoqtMWW" 
 CREDENTIALS_FILE = 'credentials.json'
-ADMIN_IDS = [123456789] # ВСТАВЬ СВОЙ ID
+ADMIN_IDS = [1997428703] # ВСТАВЬ СВОЙ ID
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))

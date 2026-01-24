@@ -11,11 +11,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiohttp import web
 
-# --- НАСТРОЙКИ ---
+# --- CONFIG ---
 TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 
-# Каналы для подписки
 CHANNEL_ID = "@nvibee_bet"
 CHAT_ID = "@chatvibee_bet"
 CHANNEL_URL = "https://t.me/nvibee_bet"
@@ -25,47 +24,213 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
-# --- ХРАНИЛИЩЕ ДАННЫХ (RAM) ---
 users = {}
-bj_games = {} # Текущие игры в BlackJack
-bot_username = "" # Узнаем при старте
+bj_games = {}
+bot_username = ""
 
-def get_user(user_id, first_name="Игрок"):
-    if user_id not in users:
-        users[user_id] = {
-            "name": first_name,
-            "balance": 50000,
-            "deposit": 0,
-            "btc": 0.0,
-            "tools": 0,
-            "lvl": 1,
-            "xp": 0,
-            "last_bonus": None, # Время последнего бонуса
-            "refs": 0, # Количество приглашенных
-            "reg_date": datetime.now().strftime("%d.%m.%Y")
-        }
-    return users[user_id]
+# --- УМНОЕ ФОРМАТИРОВАНИЕ ЧИСЕЛ ---
+def format_num(num):
+    num = float(num)
+    if num < 1000:
+        return str(int(num))
+    elif num < 1_000_000:
+        val = num / 1000
+        return f"{val:.2f}к".replace(".00", "") if val % 1 != 0 else f"{int(val)}к"
+    elif num < 1_000_000_000:
+        val = num / 1_000_000
+        return f"{val:.2f}кк".replace(".00", "") if val % 1 != 0 else f"{int(val)}кк"
+    else:
+        val = num / 1_000_000_000
+        return f"{val:.2f}ккк".replace(".00", "") if val % 1 != 0 else f"{int(val)}ккк"
 
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
-def format_money(num):
-    return f"{int(num):,}".replace(",", " ")
-
-def get_xp_needed(lvl):
-    return lvl * 4  # 1->4, 2->8, 3->12...
-
-def add_xp(user_id, amount):
-    u = users[user_id]
-    u['xp'] += amount
-    req = get_xp_needed(u['lvl'])
+def parse_amount(text, balance=0):
+    if not text: return None
+    text = str(text).lower().strip().replace(",", ".")
+    if text in ["все", "всё", "all"]: return int(balance)
     
-    # Повышение уровня
-    if u['xp'] >= req:
-        u['xp'] -= req
-        u['lvl'] += 1
-        return True # Level UP!
-    return False
+    mults = {"кккк": 10**12, "ккк": 10**9, "кк": 10**6, "к": 1000}
+    for m, v in mults.items():
+        if text.endswith(m):
+            try: return int(float(text.replace(m, "")) * v)
+            except: return None
+    try: return int(float(text))
+    except: return None
 
-async def check_subscription(user_id):
+# --- БАЗОВЫЕ ФУНКЦИИ ---
+def get_user(uid, name="Игрок"):
+    if uid not in users:
+        users[uid] = {
+            "name": name, "balance": 50000, "btc": 0.0, "tools": 0,
+            "lvl": 1, "xp": 0, "refs": 0, "last_bonus": None, "reg": datetime.now().strftime("%d.%m.%Y")
+        }
+    return users[uid]
+
+async def is_sub(uid):
+    try:
+        m1 = await bot.get_chat_member(CHANNEL_ID, uid)
+        m2 = await bot.get_chat_member(CHAT_ID, uid)
+        return m1.status in ['member', 'administrator', 'creator'] and m2.status in ['member', 'administrator', 'creator']
+    except: return False
+
+# --- ОБРАБОТЧИКИ ---
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message, command: CommandObject):
+    u = get_user(message.from_user.id, message.from_user.first_name)
+    if command.args and command.args.isdigit():
+        ref_id = int(command.args)
+        if ref_id != message.from_user.id and ref_id in users and message.from_user.id not in users:
+            users[ref_id]['balance'] += 150000
+            users[ref_id]['refs'] += 1
+            try: await bot.send_message(ref_id, f"🤝 <b>Новый реферал!</b> Вам начислено <b>150к</b>")
+            except: pass
+
+    cap = f"🚀 <b>Vibe Bet 4.0</b>\n\nПринимаем ставки: <b>1к, 1.5к, 10кк</b>\nРефералка: <b>150к</b>\nБонус: <b>/bonus</b>"
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📢 Канал", url=CHANNEL_URL), InlineKeyboardButton(text="💬 Чат", url=CHAT_URL)], [InlineKeyboardButton(text="✅ Проверить", callback_data="check")]])
+    try: await message.answer_photo(photo=FSInputFile("start_img.jpg"), caption=cap, reply_markup=kb)
+    except: await message.answer(cap, reply_markup=kb)
+
+@dp.message(F.text.lower().in_({"я", "профиль"}))
+async def cmd_profile(message: Message):
+    if not await is_sub(message.from_user.id): return
+    u = get_user(message.from_user.id)
+    text = (f"👤 <b>{u['name']}</b>\n"
+            f"⭐ Уровень: <b>{u['lvl']}</b> ({u['xp']}/{u['lvl']*4} XP)\n"
+            f"💰 Баланс: <b>{format_num(u['balance'])} $</b>\n"
+            f"🪙 BTC: <b>{u['btc']:.6f}</b>\n"
+            f"👥 Рефов: <b>{u['refs']}</b>\n\n"
+            f"🔗 Ссылка: <code>/ref</code>")
+    await message.answer(text)
+
+# --- ИГРЫ ---
+
+@dp.message(Command("р", "рулетка", "casino"))
+async def cmd_roulette(message: Message, command: CommandObject):
+    u = get_user(message.from_user.id)
+    args = command.args.split() if command.args else []
+    if len(args) < 2: return await message.answer("🎰 <b>Формат:</b> <code>/р [сумма] [куда]</code>\nКуда: red, black, green")
+    
+    amt = parse_amount(args[0], u['balance'])
+    goal = args[1].lower()
+    
+    if not amt or amt > u['balance'] or amt <= 0: return await message.answer("❌ Ошибка суммы!")
+    if goal not in ['red', 'black', 'green', 'красное', 'черное', 'зеленое']: return await message.answer("❌ Куда ставим?")
+    
+    u['balance'] -= amt
+    roll = random.randint(0, 36)
+    color = "green" if roll == 0 else ("red" if roll % 2 == 0 else "black")
+    
+    win = 0
+    if (goal in ['red', 'красное'] and color == 'red') or (goal in ['black', 'черное'] and color == 'black'):
+        win = amt * 2
+    elif (goal in ['green', 'зеленое'] and color == 'green'):
+        win = amt * 14
+        
+    if win > 0:
+        u['balance'] += win
+        u['xp'] += 1
+        res = f"✅ <b>ВЫИГРЫШ!</b>\nМножитель: <b>x{win/amt}</b>\nПлюс: <b>+{format_num(win)} $</b>"
+    else:
+        res = f"❌ <b>ПРОИГРЫШ</b>\nВыпало: <b>{color} ({roll})</b>"
+    
+    await message.answer(f"🎰 <b>РУЛЕТКА</b>\n{res}\n💰 Баланс: {format_num(u['balance'])} $")
+
+@dp.message(Command("21", "bj", "очко"))
+async def cmd_bj(message: Message, command: CommandObject):
+    u = get_user(message.from_user.id)
+    amt = parse_amount(command.args, u['balance'])
+    if not amt or amt > u['balance'] or amt <= 0: return await message.answer("🃏 <b>Формат:</b> <code>/21 [сумма]</code>")
+    
+    u['balance'] -= amt
+    deck = [2,3,4,5,6,7,8,9,10,10,10,10,11] * 4
+    random.shuffle(deck)
+    p, d = [deck.pop(), deck.pop()], [deck.pop(), deck.pop()]
+    bj_games[message.from_user.id] = {'bet': amt, 'p': p, 'd': d, 'deck': deck}
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="👊 Еще", callback_data="bj_h"), InlineKeyboardButton(text="✋ Стоп", callback_data="bj_s")]])
+    await message.answer(f"🃏 <b>ОЧКО</b>\n\nВы: <b>{sum(p)}</b>\nДилер: <b>{d[0]}</b>", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("bj_"))
+async def bj_callback(call: CallbackQuery):
+    uid = call.from_user.id
+    if uid not in bj_games: return await call.answer("Игра не найдена!")
+    g = bj_games[uid]
+    
+    if call.data == "bj_h":
+        g['p'].append(g['deck'].pop())
+        if sum(g['p']) > 21:
+            await call.message.edit_text(f"💀 <b>ПЕРЕБОР!</b> ({sum(g['p'])})\nМинус: <b>{format_num(g['bet'])} $</b>")
+            del bj_games[uid]
+        else:
+            kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="👊 Еще", callback_data="bj_h"), InlineKeyboardButton(text="✋ Стоп", callback_data="bj_s")]])
+            await call.message.edit_text(f"🃏 <b>ОЧКО</b>\n\nВы: <b>{sum(g['p'])}</b>\nДилер: <b>{g['d'][0]}</b>", reply_markup=kb)
+    elif call.data == "bj_s":
+        while sum(g['d']) < 17: g['d'].append(g['deck'].pop())
+        ps, ds, u = sum(g['p']), sum(g['d']), get_user(uid)
+        if ds > 21 or ps > ds:
+            win = g['bet'] * 2
+            u['balance'] += win
+            res = f"✅ <b>ВЫИГРЫШ!</b>\nПлюс: <b>+{format_num(win)} $</b>"
+        elif ps == ds:
+            u['balance'] += g['bet']
+            res = "🤝 <b>НИЧЬЯ!</b>"
+        else:
+            res = f"❌ <b>ПРОИГРЫШ!</b>\nУ дилера: {ds}"
+        await call.message.edit_text(f"🃏 <b>ИТОГ</b>\nВы: {ps} | Дилер: {ds}\n\n{res}")
+        del bj_games[uid]
+
+# --- РАБОТА И БОНУС ---
+
+@dp.message(Command("work", "копать", "клад"))
+async def cmd_work(message: Message):
+    u = get_user(message.from_user.id)
+    if u['tools'] <= 0:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛒 Купить за 250к", callback_data="buy")]])
+        return await message.answer("🛠 <b>Инструменты сломаны!</b>", reply_markup=kb)
+    
+    cash = random.randint(20000, 60000)
+    u['balance'] += cash
+    u['tools'] -= 1
+    u['xp'] += 1
+    await message.answer(f"⛏ <b>Вы нашли клад!</b>\nНаходка: <b>{format_num(cash)} $</b>\nПрочность: {u['tools']}/5")
+
+@dp.callback_query(F.data == "buy")
+async def buy_tools(call: CallbackQuery):
+    u = get_user(call.from_user.id)
+    if u['balance'] >= 250000:
+        u['balance'] -= 250000
+        u['tools'] = 5
+        await call.message.edit_text("✅ <b>Инструменты куплены!</b>")
+    else: await call.answer("❌ Недостаточно средств!")
+
+@dp.message(Command("bonus"))
+async def cmd_bonus(message: Message):
+    u = get_user(message.from_user.id)
+    now = datetime.now()
+    if u['last_bonus'] and now < u['last_bonus'] + timedelta(hours=1):
+        diff = (u['last_bonus'] + timedelta(hours=1)) - now
+        return await message.answer(f"⏳ Жди {int(diff.total_seconds()//60)} мин.")
+    
+    reward = 50000 + (u['lvl'] - 1) * 25000
+    u['balance'] += reward
+    u['last_bonus'] = now
+    await message.answer(f"🎁 Бонус: <b>{format_num(reward)} $</b>")
+
+# --- СИСТЕМНОЕ ---
+async def main():
+    global bot_username
+    me = await bot.get_me()
+    bot_username = me.username
+    app = web.Application()
+    app.router.add_get("/", lambda r: web.Response(text="Vibe Bet Alive"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", PORT).start()
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())async def check_subscription(user_id):
     try:
         m1 = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         m2 = await bot.get_chat_member(chat_id=CHAT_ID, user_id=user_id)

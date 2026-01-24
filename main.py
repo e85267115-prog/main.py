@@ -265,8 +265,14 @@ async def handle_ping(request): return web.Response(text="Bot is running")
 
 async def main():
     await init_db()
+# Внутри функции main()
     dp['db_pool'] = await asyncpg.create_pool(
-        DB_URL, ssl='disable', statement_cache_size=0, max_cacheable_statement_size=0
+        DB_URL, 
+        ssl='disable',
+        min_size=1,
+        max_size=10,
+        statement_cache_size=0,         # Обязательно для Supabase Pooler
+        max_cacheable_statement_size=0   # Обязательно для Supabase Pooler
     )
     asyncio.create_task(bank_scheduler())
     

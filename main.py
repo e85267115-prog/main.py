@@ -69,7 +69,7 @@ def get_drive_service():
     creds = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=['https://www.googleapis.com/auth/drive'])
     return build('drive', 'v3', credentials=creds)
 
-# --- УТИЛИТЫ ---
+# --- УТИЛИТЫ ФОРМАТИРОВАНИЯ ---
 def format_num(num):
     num = float(num)
     if num < 1000: return str(int(num))
@@ -126,28 +126,36 @@ async def ban_check(handler, event, data):
         return
     return await handler(event, data)
 
-# --- КОМАНДЫ ---
+# --- ПРИВЕТСТВИЕ ---
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     txt = "Добро Пожаловать в Vibe Bet. Играй и Веселись, все это ТУТ!"
     try: await message.answer_photo(FSInputFile("start_img.jpg"), caption=txt)
     except: await message.answer(txt)
 
+# --- ПОМОЩЬ ---
 @dp.message(F.text.lower() == "помощь")
-async def cmd_help(message(Message)):
+async def cmd_help(message: Message):
     txt = (
-        "💎 <b>МЕНЮ VIBE BET</b>\n"
+        "💎 <b>ЦЕНТР ПОМОЩИ VIBE BET</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "👤 <b>ПРОФИЛЬ:</b> <code>Профиль</code>, <code>Топ</code>\n"
-        "🎰 <b>ИГРЫ:</b> <code>Рул [сумма] [цвет]</code>, <code>Краш [сумма] [кэф]</code>\n"
-        "⛏️ <b>РАБОТА:</b> <code>Работа</code>, <code>Магазин</code>, <code>Бонус</code>\n"
-        "🏦 <b>ФИНАНСЫ:</b> <code>Банк</code>, <code>Деп [сумма]</code>, <code>Снять [сумма]</code>\n"
-        "🪙 <b>БИТКОИН:</b> <code>Рынок</code>, <code>Продать биткоин [кол-во]</code>\n"
-        "🎁 <b>БОНУСЫ:</b> <code>Промо [код]</code>, <code>Создать промо ...</code>\n"
+        "👤 <b>ЛИЧНОЕ:</b>\n"
+        "└ <code>Профиль</code> | <code>Топ</code>\n\n"
+        "🎰 <b>АЗАРТ:</b>\n"
+        "└ <code>Рул [сумма] [цвет]</code>\n"
+        "└ <code>Краш [сумма] [кэф]</code>\n\n"
+        "⛏️ <b>АКТИВНОСТЬ:</b>\n"
+        "└ <code>Работа</code> | <code>Магазин</code> | <code>Бонус</code>\n\n"
+        "🏦 <b>ФИНАНСЫ:</b>\n"
+        "└ <code>Банк</code> | <code>Деп [сумма]</code> | <code>Снять [сумма]</code>\n"
+        "└ <code>Рынок</code> | <code>Продать биткоин [кол-во]</code>\n\n"
+        "🎁 <b>ПРОМО:</b>\n"
+        "└ <code>Промо [код]</code> | <code>Создать промо ...</code>\n"
         "━━━━━━━━━━━━━━━━━━"
     )
     await message.answer(txt)
 
+# --- ПРОФИЛЬ ---
 @dp.message(F.text.lower().in_({"профиль", "я"}))
 async def cmd_profile(message: Message):
     u = get_user(message.from_user.id)
@@ -163,25 +171,26 @@ async def cmd_profile(message: Message):
     )
     await message.answer(txt)
 
-# --- РАБОТА (3 ЭТАПА) ---
+# --- РАБОТА (ИНТЕРАКТИВ) ---
 @dp.message(F.text.lower() == "работа")
 async def work_stage1(message: Message):
     u = get_user(message.from_user.id)
     if not u['shovel'] or not u['detector']:
-        return await message.answer("❌ <b>Ошибка!</b>\nКупите лопату и детектор в магазине.")
+        return await message.answer("❌ <b>Ошибка!</b>\nСначала купите <b>Лопату</b> и <b>Детектор</b> в магазине.")
     now = datetime.now().timestamp()
     if now - u['last_work'] < 600:
-        return await message.answer(f"⏳ Отдохните еще {int((600-(now-u['last_work']))//60)} мин.")
+        rem = int(600 - (now - u['last_work']))
+        return await message.answer(f"⏳ <b>Вы устали!</b>\nОтдохните еще {rem // 60} мин.")
     
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Начать поиск 🗺️", callback_data="w_scan")]])
-    await message.answer("⛏️ <b>КЛАДОИСКАТЕЛЬ</b>\n━━━━━━━━━━━━\nГотовы найти сокровища?", reply_markup=kb)
+    await message.answer("⛏️ <b>КЛАДОИСКАТЕЛЬ</b>\n━━━━━━━━━━━━\nВы готовы отправиться на поиски сокровищ?", reply_markup=kb)
 
 @dp.callback_query(F.data == "w_scan")
 async def work_stage2(call: CallbackQuery):
-    await call.message.edit_text("📡 <b>СКАНИРОВАНИЕ...</b>\n━━━━━━━━━━━━\n<i>Ищем сигналы под землей...</i>")
+    await call.message.edit_text("📡 <b>СКАНИРОВАНИЕ...</b>\n━━━━━━━━━━━━\n<i>Ищем сигналы ценных металлов под землей...</i>")
     await asyncio.sleep(2)
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⛏️ КОПАТЬ ТУТ", callback_data="w_fin")]])
-    await call.message.edit_text("📍 <b>СИГНАЛ НАЙДЕН!</b>\n━━━━━━━━━━━━\nНачинаем раскопки?", reply_markup=kb)
+    await call.message.edit_text("📍 <b>СИГНАЛ НАЙДЕН!</b>\n━━━━━━━━━━━━\nДетектор пищит! Начинаем раскопки?", reply_markup=kb)
 
 @dp.callback_query(F.data == "w_fin")
 async def work_stage3(call: CallbackQuery):
@@ -191,45 +200,45 @@ async def work_stage3(call: CallbackQuery):
     u['balance'] += win; u['xp'] += 3
     if u['xp'] >= u['lvl']*10: u['lvl'] += 1; u['xp'] = 0
     await save_data()
-    await call.message.edit_text(f"💎 <b>УСПЕХ!</b>\n━━━━━━━━━━━━\n💰 Найдено: <b>{format_num(win)} $</b>\n📊 Опыт: <b>+3 XP</b>\n💰 Баланс: <b>{format_num(u['balance'])} $</b>")
+    await call.message.edit_text(f"💎 <b>УСПЕШНЫЕ РАСКОПКИ!</b>\n━━━━━━━━━━━━\n💰 Найдено: <b>{format_num(win)} $</b>\n📊 Опыт: <b>+3 XP</b>\n━━━━━━━━━━━━\n💰 Баланс: <b>{format_num(u['balance'])} $</b>")
 
-# --- ГЕМБЛИНГ ---
+# --- ГЕМБЛИНГ (РУЛЕТКА И КРАШ) ---
 @dp.message(F.text.lower().startswith("рул"))
 async def cmd_roul(message: Message):
     u = get_user(message.from_user.id)
     try:
         args = message.text.split(); amt = parse_amount(args[1], u['balance']); col = args[2].lower()
-        if amt < 10 or amt > u['balance']: return await message.answer("❌ Нет денег!")
+        if amt < 10 or amt > u['balance']: return await message.answer("❌ Недостаточно средств!")
         u['balance'] -= amt
         res = random.randint(0, 36)
         win_c = "зеленый" if res == 0 else "красный" if res in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "черный"
         mul = 14 if col[:3] == "зел" and win_c == "зеленый" else 2 if col[:3] == win_c[:3] else 0
         u['balance'] += (amt * mul)
-        status = f"✅ Выиграл: <b>+{format_num(amt*mul)}$</b>" if mul else f"❌ Слил: <b>-{format_num(amt)}$</b>"
+        status = f"✅ <b>ВЫИГРЫШ: +{format_num(amt*mul)}$</b>" if mul else f"❌ <b>ПРОИГРЫШ: -{format_num(amt)}$</b>"
         await message.answer(f"🎡 <b>РУЛЕТКА</b>\n━━━━━━━━━━━━\n🎰 Выпало: <b>{res} ({win_c})</b>\n📥 Ставка: {format_num(amt)}$ на {col}\n━━━━━━━━━━━━\n{status}\n💰 Баланс: <b>{format_num(u['balance'])} $</b>")
         await save_data()
-    except: await message.answer("📝 Рул [сумма] [цвет]")
+    except: await message.answer("📝 Пример: <code>Рул 100 крас</code>")
 
 @dp.message(F.text.lower().startswith("краш"))
 async def cmd_crash(message: Message):
     u = get_user(message.from_user.id)
     try:
         args = message.text.split(); amt = parse_amount(args[1], u['balance']); target = float(args[2].replace(",", "."))
-        if amt < 10 or amt > u['balance']: return await message.answer("❌ Ошибка!")
+        if amt < 10 or amt > u['balance']: return await message.answer("❌ Ошибка ставки!")
         u['balance'] -= amt; crash = round(random.uniform(1.0, 3.5), 2)
         if target <= crash:
             win = int(amt * target); u['balance'] += win
-            res = f"✅ Выигрыш: <b>+{format_num(win)}$</b>"
-        else: res = f"❌ Проигрыш: <b>-{format_num(amt)}$</b>"
-        await message.answer(f"🚀 <b>КРАШ</b>\n━━━━━━━━━━━━\n📈 Кэф: <b>x{crash}</b> | Цель: <b>x{target}</b>\n━━━━━━━━━━━━\n{res}\n💰 Баланс: <b>{format_num(u['balance'])} $</b>")
+            res = f"✅ <b>РАКЕТА ДОЛЕТЕЛА: +{format_num(win)}$</b>"
+        else: res = f"💥 <b>РАКЕТА ВЗОРВАЛАСЬ: -{format_num(amt)}$</b>"
+        await message.answer(f"🚀 <b>КРАШ-ИГРА</b>\n━━━━━━━━━━━━\n📈 Вылет на: <b>x{crash}</b>\n🎯 Ваша цель: <b>x{target}</b>\n━━━━━━━━━━━━\n{res}\n💰 Баланс: <b>{format_num(u['balance'])} $</b>")
         await save_data()
-    except: await message.answer("📝 Краш [сумма] [кэф]")
+    except: await message.answer("📝 Пример: <code>Краш 100 1.5</code>")
 
-# --- БАНК ---
+# --- БАНК (10% В 00:00) ---
 @dp.message(F.text.lower() == "банк")
 async def cmd_bank(message: Message):
     u = get_user(message.from_user.id)
-    await message.answer(f"🏦 <b>VIBE BANK</b>\n━━━━━━━━━━━━\n💰 В банке: <b>{format_num(u['bank'])} $</b>\n📈 Процент: <b>10% в 00:00 МСК</b>\n━━━━━━━━━━━━\n<i>'Деп [сумма]' | 'Снять [сумма]'</i>")
+    await message.answer(f"🏦 <b>VIBE BANK</b>\n━━━━━━━━━━━━\n💰 На счету: <b>{format_num(u['bank'])} $</b>\n📈 Процент: <b>10% ежедневно в 00:00</b>\n━━━━━━━━━━━━\n<i>Используйте 'Деп [сумма]' или 'Снять [сумма]'</i>")
 
 @dp.message(F.text.lower().startswith("деп"))
 async def cmd_dep(message: Message):
@@ -237,8 +246,8 @@ async def cmd_dep(message: Message):
     try:
         amt = parse_amount(message.text.split()[1], u['balance'])
         if amt > 0 and u['balance'] >= amt:
-            u['balance'] -= amt; u['bank'] += amt; await save_data()
-            await message.answer(f"✅ Внесено: <b>{format_num(amt)}$</b>")
+            u['balance'] -= amt; u['bank'] += amt
+            await message.answer(f"✅ Вы внесли <b>{format_num(amt)}$</b> в банк!"); await save_data()
     except: pass
 
 @dp.message(F.text.lower().startswith("снять"))
@@ -247,8 +256,8 @@ async def cmd_withdraw(message: Message):
     try:
         amt = parse_amount(message.text.split()[1], u['bank'])
         if amt > 0 and u['bank'] >= amt:
-            u['bank'] -= amt; u['balance'] += amt; await save_data()
-            await message.answer(f"✅ Снято: <b>{format_num(amt)}$</b>")
+            u['bank'] -= amt; u['balance'] += amt
+            await message.answer(f"✅ Вы сняли <b>{format_num(amt)}$</b> из банка!"); await save_data()
     except: pass
 
 # --- ПРОМОКОДЫ ---
@@ -257,12 +266,13 @@ async def cmd_create_promo(message: Message):
     u = get_user(message.from_user.id)
     try:
         args = message.text.split(); code = args[2].upper(); reward = parse_amount(args[3], u['balance']); uses = int(args[4])
-        if u['balance'] < (reward * uses): return await message.answer("❌ Не хватает баланса!")
-        u['balance'] -= (reward * uses)
+        total = reward * uses
+        if u['balance'] < total: return await message.answer("❌ Недостаточно средств!")
+        u['balance'] -= total
         promos[code] = {"reward": reward, "uses": uses}
         await save_data()
         await message.answer(f"✨ <b>ПРОМОКОД СОЗДАН</b>\n━━━━━━━━━━━━━━━━━━\n🎫 Код: <code>{code}</code>\n💰 Награда: <b>{format_num(reward)} $</b>\n👥 Активаций: <b>{uses}</b>\n━━━━━━━━━━━━━━━━━━")
-    except: await message.answer("📝 Создать промо [КОД] [СУММА] [КОЛ-ВО]")
+    except: await message.answer("📝: <code>Создать промо [КОД] [СУММА] [КОЛ-ВО]</code>")
 
 @dp.message(F.text.lower().startswith("промо"))
 async def cmd_use_promo(message: Message):
@@ -270,54 +280,24 @@ async def cmd_use_promo(message: Message):
     u = get_user(message.from_user.id)
     try:
         code = message.text.split()[1].upper()
-        if code not in promos or code in u['used_promos']: return await message.answer("❌ Ошибка активации!")
+        if code not in promos or code in u['used_promos']: return await message.answer("❌ Код не найден или уже использован!")
         u['balance'] += promos[code]['reward']; u['used_promos'].append(code); promos[code]['uses'] -= 1
         reward = promos[code]['reward']
         if promos[code]['uses'] <= 0: del promos[code]
-        await message.answer(f"✅ Получено <b>{format_num(reward)} $</b>!"); await save_data()
-    except: pass
-
-# --- РЫНОК ---
-@dp.message(F.text.lower() == "рынок")
-async def cmd_market(message: Message):
-    p = await get_btc_price(); u = get_user(message.from_user.id)
-    await message.answer(f"📊 <b>КРИПТО-РЫНОК</b>\n━━━━━━━━━━━━\n🪙 Курс BTC: <b>{format_num(p)}$</b>\n💰 У вас: <b>{u['btc']:.6f} BTC</b>")
-
-@dp.message(F.text.lower().startswith("продать биткоин"))
-async def cmd_sell_btc(message: Message):
-    u = get_user(message.from_user.id)
-    try:
-        amt = float(message.text.split()[2].replace(",", ".")); p = await get_btc_price()
-        if u['btc'] >= amt:
-            gain = int(amt * p); u['btc'] -= amt; u['balance'] += gain
-            await message.answer(f"✅ Продано за <b>{format_num(gain)}$</b>"); await save_data()
+        await message.answer(f"✅ Успешно! Получено <b>{format_num(reward)} $</b>"); await save_data()
     except: pass
 
 # --- БОНУС ---
 @dp.message(F.text.lower() == "бонус")
 async def cmd_bonus(message: Message):
-    u = get_user(message.from_user.id); now = datetime.now().timestamp()
+    u = get_user(message.from_user.id)
+    now = datetime.now().timestamp()
     if now - u.get('last_bonus', 0) < 3600:
-        return await message.answer(f"⏳ Бонус через {int((3600-(now-u['last_bonus']))//60)} мин.")
+        rem = int(3600 - (now - u['last_bonus']))
+        return await message.answer(f"⏳ Бонус будет доступен через <b>{rem // 60} мин.</b>")
     gain = 50000 + (u['lvl'] - 1) * 25000
     u['balance'] += gain; u['last_bonus'] = now; await save_data()
-    await message.answer(f"🎁 <b>БОНУС</b>\nПолучено: <b>{format_num(gain)} $</b> (Ур. {u['lvl']})")
-
-# --- МАГАЗИН ---
-@dp.message(F.text.lower() == "магазин")
-async def cmd_shop(message: Message):
-    u = get_user(message.from_user.id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Лопата (50к)", callback_data="buy_sh"), InlineKeyboardButton(text="Детектор (100к)", callback_data="buy_dt")]
-    ])
-    await message.answer(f"🏪 <b>МАГАЗИН</b>\nЛопата: {'✅' if u['shovel'] else '❌'}\nДетектор: {'✅' if u['detector'] else '❌'}", reply_markup=kb)
-
-@dp.callback_query(F.data.startswith("buy_"))
-async def shop_buy(call: CallbackQuery):
-    u = get_user(call.from_user.id); item = "shovel" if "sh" in call.data else "detector"
-    price = 50000 if item == "shovel" else 100000
-    if u[item] or u['balance'] < price: return await call.answer("Недоступно", show_alert=True)
-    u['balance'] -= price; u[item] = 1; await save_data(); await call.message.delete(); await cmd_shop(call.message)
+    await message.answer(f"🎁 <b>ЕЖЕЧАСНЫЙ БОНУС</b>\n━━━━━━━━━━━━\nВы получили: <b>{format_num(gain)} $</b> (Ур. {u['lvl']})")
 
 # --- АДМИН ПАНЕЛЬ ---
 @dp.message()
@@ -328,24 +308,25 @@ async def admin_cmds(message: Message):
         uid = int(args[1])
         if t.startswith("выдатьбтк"):
             val = float(args[2]); get_user(uid)['btc'] += val
-            await bot.send_message(uid, f"🎁 Админ выдал вам <b>{val} BTC</b>!")
+            await bot.send_message(uid, f"🎁 <b>АДМИНИСТРАЦИЯ:</b> Вам начислено <b>{val} BTC</b>!")
         elif t.startswith("выдатьлвл"):
             val = int(args[2]); get_user(uid)['lvl'] = val
-            await bot.send_message(uid, f"⭐ Ваш уровень теперь: <b>{val}</b>")
+            await bot.send_message(uid, f"⭐ <b>АДМИНИСТРАЦИЯ:</b> Ваш уровень теперь: <b>{val}</b>!")
         elif t.startswith("выдатьхп"):
             val = int(args[2]); get_user(uid)['xp'] = val
         elif t.startswith("выдать"):
             val = parse_amount(args[2], 0); get_user(uid)['balance'] += val
-            await bot.send_message(uid, f"💰 Вам выдано <b>{format_num(val)}$</b>!")
+            await bot.send_message(uid, f"💰 <b>АДМИНИСТРАЦИЯ:</b> Вам начислено <b>{format_num(val)} $</b>!")
         elif t.startswith("бан"):
             get_user(uid)['banned'] = True
-            await bot.send_message(uid, "🚫 Вы забанены!")
+            await bot.send_message(uid, "🚫 <b>Ваш аккаунт заблокирован администратором.</b>")
         elif t.startswith("разбан"):
             get_user(uid)['banned'] = False
-            await bot.send_message(uid, "✅ Вы разблокированы!")
-        await message.answer("✅ Готово"); await save_data()
+            await bot.send_message(uid, "✅ <b>Ваш аккаунт разблокирован!</b>")
+        await message.answer("✅ <b>Команда выполнена!</b>"); await save_data()
     except: pass
 
+# --- BACKGROUND JOBS ---
 async def bank_interest():
     for u in users.values():
         if u['bank'] > 0: u['bank'] += int(u['bank'] * 0.10)

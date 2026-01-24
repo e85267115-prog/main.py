@@ -1,7 +1,6 @@
-aiogram
+aiogram>=3.0.0
 aiohttp
 google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
+google-auth
 apscheduler
 pytz

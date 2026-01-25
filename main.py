@@ -5,9 +5,8 @@ import random
 import json
 import io
 import time
-import aiohttp
-from datetime import datetime, timedelta
-from pytz import timezone
+from datetime import datetime
+from typing import Dict, List, Optional, Union
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, FSInputFile
@@ -20,882 +19,897 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# --- CONFIG ---
+# ==========================================
+# КОНФИГУРАЦИЯ И НАСТРОЙКИ
+# ==========================================
+
+# Основные токены и ID
 TOKEN = os.getenv("BOT_TOKEN") 
-# Add your Admin ID here
-ADMIN_IDS = [1997428703] 
+ADMIN_IDS = [1997428703] # Твой ID
 PORT = int(os.getenv("PORT", 8080))
+BOT_USERNAME = "VibeBetBot"
+
+# Google Drive
 DRIVE_FILE_ID = "1_PdomDLZAisdVlkCwkQn02x75uoqtMWW" 
 CREDENTIALS_FILE = 'credentials.json'
-BOT_USERNAME = "VibeBetBot" 
 
-# Channels for subscription
+# Каналы (Обязательная подписка)
 REQUIRED_CHANNELS = [
     {"username": "@chatvibee_bet", "link": "https://t.me/chatvibee_bet"},
     {"username": "@nvibee_bet", "link": "https://t.me/nvibee_bet"}
 ]
 
-logging.basicConfig(level=logging.INFO)
+# Настройки Фермы (Майнинг)
+FARM_CONFIG = {
+    "rtx3060": {"name": "NVIDIA RTX 3060", "price": 150000, "income": 0.00001, "scale": 1.2, "limit": 3},
+    "rtx4070": {"name": "NVIDIA RTX 4070", "price": 220000, "income": 0.00004, "scale": 1.2, "limit": 3},
+    "rtx4090": {"name": "NVIDIA RTX 4090", "price": 350000, "income": 0.00007, "scale": 1.3, "limit": 3}
+}
+
+# Настройки Работы
+WORK_CONFIG = {
+    "tools": {
+        "shovel": {"name": "Лопата", "price": 50000},
+        "detector": {"name": "Металлоискатель", "price": 100000}
+    },
+    "cooldown": 600, # 10 минут
+    "rewards": {"min": 30000, "max": 150000},
+    "btc_chance": 0.10, # 10%
+    "xp_gain": {"min": 1, "max": 5}
+}
+
+# Экономика уровней
+LEVEL_CONFIG = {
+    "xp_base": 4, # С 1 на 2 уровень нужно 4 xp
+    "xp_step": 4, # +4 xp за каждый следующий уровень
+    "bonus_base": 50000,
+    "bonus_step": 25000
+}
+
+# Логирование
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# Инициализация бота
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 
-# In-memory storage
-users = {}
-promos = {}
-active_games = {} 
+# ==========================================
+# МЕНЕДЖЕР ДАННЫХ (DATABASE MANAGER)
+# ==========================================
 
-# Global Market State
-btc_rate = 50000  # Default starting price
+class DataManager:
+    """Класс для управления данными пользователей и сохранения в Google Drive"""
+    def __init__(self):
+        self.users: Dict[int, dict] = {}
+        self.promos: Dict[str, dict] = {}
+        self.market_btc: int = 50000
+        self.active_games: Dict[str, dict] = {}
 
-# --- FARM CONFIG ---
-# Max 3 cards of each type per person
-FARM_CONFIG = {
-    "rtx3060": {"name": "RTX 3060", "base_price": 150000, "income": 0.00001, "scale": 1.2, "limit": 3},
-    "rtx4070": {"name": "RTX 4070", "base_price": 220000, "income": 0.00004, "scale": 1.2, "limit": 3},
-    "rtx4090": {"name": "RTX 4090", "base_price": 350000, "income": 0.00007, "scale": 1.3, "limit": 3}
-}
+    def get_service(self):
+        if not os.path.exists(CREDENTIALS_FILE):
+            logger.error("Файл credentials.json не найден!")
+            return None
+        try:
+            creds = service_account.Credentials.from_service_account_file(
+                CREDENTIALS_FILE, scopes=['https://www.googleapis.com/auth/drive']
+            )
+            return build('drive', 'v3', credentials=creds)
+        except Exception as e:
+            logger.error(f"Ошибка авторизации Google: {e}")
+            return None
 
-# --- WORK CONFIG ---
-WORK_CONFIG = {
-    "shovel_price": 50000,
-    "detector_price": 100000,
-    "cooldown": 600, # 10 minutes
-    "reward_min": 30000,
-    "reward_max": 150000,
-    "btc_chance": 0.10, # 10%
-    "btc_drop_range": [1.0, 2.0] # Drops 1-2 BTC
-}
+    def load(self):
+        service = self.get_service()
+        if not service: return
+        try:
+            logger.info("Загрузка БД из Google Drive...")
+            request = service.files().get_media(fileId=DRIVE_FILE_ID)
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done: _, done = downloader.next_chunk()
+            
+            content = fh.getvalue().decode('utf-8').strip()
+            if content:
+                data = json.loads(content)
+                self.users = {int(k): v for k, v in data.get("users", {}).items()}
+                self.promos = data.get("promos", {})
+                self.market_btc = data.get("market_btc", 50000)
+                logger.info(f"БД загружена. Пользователей: {len(self.users)}")
+        except Exception as e:
+            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА ЗАГРУЗКИ: {e}")
 
-# --- DB & SYNC ---
-def sync_load():
-    global users, promos
-    service = get_drive_service()
-    if not service: return
-    try:
-        request = service.files().get_media(fileId=DRIVE_FILE_ID)
-        fh = io.BytesIO(); downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done: _, done = downloader.next_chunk()
-        content = fh.getvalue().decode('utf-8').strip()
-        if content:
-            data = json.loads(content)
-            users = {int(k): v for k, v in data.get("users", {}).items()}
-            promos = data.get("promos", {})
-    except Exception as e:
-        logging.error(f"DB Load Error: {e}")
+    def save(self):
+        service = self.get_service()
+        if not service: return
+        try:
+            data = {
+                "users": self.users,
+                "promos": self.promos,
+                "market_btc": self.market_btc
+            }
+            with open("db.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            media = MediaFileUpload("db.json", mimetype='application/json', resumable=True)
+            service.files().update(fileId=DRIVE_FILE_ID, media_body=media).execute()
+            logger.info("БД успешно сохранена в облако.")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения: {e}")
 
-def sync_save():
-    service = get_drive_service()
-    if not service: return
-    try:
-        data_to_save = {"users": users, "promos": promos}
-        with open("db.json", "w", encoding="utf-8") as f: 
-            json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-        media = MediaFileUpload("db.json", mimetype='application/json', resumable=True)
-        service.files().update(fileId=DRIVE_FILE_ID, media_body=media).execute()
-    except Exception as e:
-        logging.error(f"DB Save Error: {e}")
+    async def async_save(self):
+        await asyncio.to_thread(self.save)
 
-async def save_data(): 
-    await asyncio.to_thread(sync_save)
+    def get_user(self, uid: int, name: str = "Игрок") -> dict:
+        uid = int(uid)
+        now = time.time()
+        
+        # Шаблон нового пользователя
+        if uid not in self.users:
+            self.users[uid] = {
+                "name": name,
+                "balance": 5000,
+                "btc": 0.0,
+                "lvl": 1,
+                "xp": 0,
+                "banned": False,
+                "registered": False,
+                "reg_date": now,
+                "inventory": {"shovel": False, "detector": False},
+                "stats": {"games_played": 0, "won": 0},
+                "last_work": 0,
+                "last_bonus": 0,
+                "used_promos": [],
+                "farm": {
+                    "rtx3060": 0, "rtx4070": 0, "rtx4090": 0,
+                    "last_collect": now
+                }
+            }
+            asyncio.create_task(self.async_save())
+        
+        # МИГРАЦИЯ (Проверка целостности данных старых юзеров)
+        u = self.users[uid]
+        if "inventory" not in u:
+            # Конвертация старого формата (shovel=1) в новый (inventory dict)
+            sh = u.get("shovel", 0)
+            det = u.get("detector", 0)
+            u["inventory"] = {"shovel": bool(sh), "detector": bool(det)}
+        
+        if "farm" not in u:
+            u["farm"] = {"rtx3060": 0, "rtx4070": 0, "rtx4090": 0, "last_collect": now}
+            
+        u["name"] = name # Обновляем имя если сменил
+        return u
 
-def get_drive_service():
-    if not os.path.exists(CREDENTIALS_FILE): return None
-    creds = service_account.Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=['https://www.googleapis.com/auth/drive'])
-    return build('drive', 'v3', credentials=creds)
+# Глобальный экземпляр БД
+db = DataManager()
 
-# --- UTILS ---
-def format_num(num):
+# ==========================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (UTILS)
+# ==========================================
+
+def format_num(num: Union[int, float]) -> str:
+    """Красивое форматирование чисел (1к, 1кк, 1ккк)"""
     num = float(num)
     if num < 1000: return str(int(num))
-    suffixes = [(1e12, "кккк"), (1e9, "ккк"), (1e6, "кк"), (1e3, "к")]
+    
+    suffixes = [
+        (1e12, "кккк"), 
+        (1e9, "ккк"), 
+        (1e6, "кк"), 
+        (1e3, "к")
+    ]
     for val, suff in suffixes:
         if num >= val:
             res = num / val
-            return f"{int(res) if res == int(res) else round(res, 2)}{suff}"
+            # Если дробная часть 0, не показываем её
+            return f"{int(res)}{suff}" if res.is_integer() else f"{res:.2f}{suff}"
     return str(int(num))
 
-def parse_amount(text, balance):
-    text = str(text).lower().replace(",", ".")
-    if text in ["все", "всё", "all", "вабанк", "max"]: return int(balance)
+def parse_money(text: str, user_balance: int) -> Optional[int]:
+    """Парсинг суммы из текста (включая 'вабанк', '10к', '5кк')"""
+    text = str(text).lower().replace(",", ".").strip()
+    if text in ["все", "всё", "all", "вабанк", "max"]: 
+        return int(user_balance)
+    
     multipliers = {"кккк": 1e12, "ккк": 1e9, "кк": 1e6, "к": 1e3}
     for suff, mult in multipliers.items():
         if text.endswith(suff):
-            try: return int(float(text[:-len(suff)]) * mult)
-            except: pass
-    try: return int(float(text))
-    except: return None
-
-def get_user(uid, name="Игрок"):
-    uid = int(uid)
-    if uid not in users:
-        users[uid] = {
-            "name": name, "balance": 5000, "btc": 0.0, 
-            "lvl": 1, "xp": 0, "banned": False, 
-            "registered": False, "reg_date": time.time(),
-            "shovel": 0, "detector": 0, 
-            "last_work": 0, "last_bonus": 0, "used_promos": [],
-            "farm": {"rtx3060": 0, "rtx4070": 0, "rtx4090": 0, "last_collect": time.time()}
-        }
-        asyncio.create_task(save_data())
+            try:
+                base = float(text[:-len(suff)])
+                return int(base * mult)
+            except ValueError:
+                return None
     
-    # Migrations
-    if "farm" not in users[uid]:
-        users[uid]["farm"] = {"rtx3060": 0, "rtx4070": 0, "rtx4090": 0, "last_collect": time.time()}
-    if "registered" not in users[uid]: users[uid]["registered"] = False
-    
-    return users[uid]
+    try:
+        val = int(float(text))
+        return val if val > 0 else None
+    except ValueError:
+        return None
 
-def check_level_up(u):
-    # XP Required: Level * 4 (e.g., Lvl 1->2 needs 4, Lvl 2->3 needs 8)
-    req = u['lvl'] * 4 
-    if u['xp'] >= req:
-        u['xp'] -= req
-        u['lvl'] += 1
-        return True
-    return False
-
-async def update_btc_market():
-    global btc_rate
-    # Random price between 10k and 150k
-    btc_rate = random.randint(10000, 150000)
-    await save_data()
-
-# --- SUBSCRIPTION CHECK ---
-async def check_subscription(user_id):
-    for channel in REQUIRED_CHANNELS:
+async def check_subs(user_id: int) -> bool:
+    """Проверка подписки на каналы"""
+    for ch in REQUIRED_CHANNELS:
         try:
-            member = await bot.get_chat_member(chat_id=channel["username"], user_id=user_id)
+            member = await bot.get_chat_member(chat_id=ch["username"], user_id=user_id)
             if member.status in ['left', 'kicked', 'restricted']:
                 return False
-        except Exception:
-            # If bot isn't admin, assume true to not block users, or return False if strict
-            return True 
+        except Exception as e:
+            logger.warning(f"Ошибка проверки подписки {user_id} на {ch['username']}: {e}")
+            # Если бот не админ, возвращаем True, чтобы не блокировать функционал
+            return True
     return True
 
-# --- MIDDLEWARE & REGISTRATION CHECK ---
+async def update_btc_course():
+    """Фоновая задача: Обновление курса BTC"""
+    old_rate = db.market_btc
+    db.market_btc = random.randint(10000, 150000)
+    await db.async_save()
+    logger.info(f"MARKET: BTC price updated {old_rate} -> {db.market_btc}")
+
+def get_level_req(lvl):
+    """Считает XP для следующего уровня. 1->2 (4xp), 2->3 (8xp), 3->4 (12xp)"""
+    return lvl * LEVEL_CONFIG["xp_step"]
+
+def add_exp(u, amount):
+    """Безопасное добавление опыта и повышение уровня"""
+    u['xp'] += amount
+    leveled_up = False
+    
+    while True:
+        req = get_level_req(u['lvl'])
+        if u['xp'] >= req:
+            u['xp'] -= req
+            u['lvl'] += 1
+            leveled_up = True
+        else:
+            break
+    return leveled_up
+
+# ==========================================
+# MIDDLEWARE (ПРОВЕРКИ)
+# ==========================================
+
 @dp.message.outer_middleware()
 @dp.callback_query.outer_middleware()
-async def global_check(handler, event, data):
-    uid = event.from_user.id
-    u = get_user(uid, event.from_user.first_name)
-    
+async def main_middleware(handler, event, data):
+    # Определение user_id и имени
+    if isinstance(event, Message):
+        uid = event.from_user.id
+        name = event.from_user.first_name
+        text = event.text or ""
+    elif isinstance(event, CallbackQuery):
+        uid = event.from_user.id
+        name = event.from_user.first_name
+        text = ""
+    else:
+        return await handler(event, data)
+
+    # Получаем профиль
+    u = db.get_user(uid, name)
+
+    # 1. Проверка бана
     if u.get('banned'):
-        return 
-        
-    # Helper to detect if command is /start or /reg
-    msg_text = event.text if isinstance(event, Message) and event.text else ""
-    is_auth_cmd = msg_text.startswith("/start") or msg_text.startswith("/reg")
-    
-    # If not registered and not using auth commands, block
-    if not u['registered'] and not is_auth_cmd:
+        return # Полный игнор
+
+    # 2. Проверка регистрации
+    is_auth_command = text.startswith("/start") or text.startswith("/reg")
+    if not u['registered'] and not is_auth_command:
         if isinstance(event, Message):
-            await event.answer("⛔ <b>Вы не зарегистрированы!</b>\nВведите /reg для создания аккаунта.")
+            await event.answer("⛔ <b>Доступ запрещен!</b>\nСначала зарегистрируйтесь: /reg")
         return
 
     return await handler(event, data)
 
-# --- COMMANDS ---
+# ==========================================
+# КЛАВИАТУРЫ (UI)
+# ==========================================
+
+def kb_main_menu():
+    return None # Используем текстовое меню или картинку
+
+def kb_sub_check():
+    kb = []
+    for ch in REQUIRED_CHANNELS:
+        kb.append([InlineKeyboardButton(text=f"👉 Подписаться на {ch['username']}", url=ch['link'])])
+    kb.append([InlineKeyboardButton(text="✅ Я ПОДПИСАЛСЯ", callback_data="reg_check_sub")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def kb_shop(u):
+    kb = []
+    inv = u['inventory']
+    
+    # Лопата
+    if not inv['shovel']:
+        p = WORK_CONFIG['tools']['shovel']['price']
+        kb.append([InlineKeyboardButton(text=f"🛠 Лопата — {format_num(p)}$", callback_data="buy_tool_shovel")])
+    else:
+        kb.append([InlineKeyboardButton(text="✅ Лопата (Куплено)", callback_data="ignore")])
+        
+    # Детектор
+    if not inv['detector']:
+        p = WORK_CONFIG['tools']['detector']['price']
+        kb.append([InlineKeyboardButton(text=f"📡 Металлоискатель — {format_num(p)}$", callback_data="buy_tool_detector")])
+    else:
+        kb.append([InlineKeyboardButton(text="✅ Металлоискатель (Куплено)", callback_data="ignore")])
+        
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def kb_farm_main():
+    kb = [
+        [InlineKeyboardButton(text="💰 Собрать прибыль", callback_data="farm_collect")],
+        [InlineKeyboardButton(text="🛒 Магазин видеокарт", callback_data="farm_shop_menu")],
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="farm_refresh")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def kb_farm_shop(u):
+    kb = []
+    for key, cfg in FARM_CONFIG.items():
+        count = u['farm'].get(key, 0)
+        # Динамическая цена: Base * (Scale ^ Count)
+        price = int(cfg['price'] * (cfg['scale'] ** count))
+        
+        if count >= cfg['limit']:
+            btn_txt = f"🚫 {cfg['name']} (МАКС)"
+            cb = "ignore"
+        else:
+            btn_txt = f"🛍 {cfg['name']} — {format_num(price)}$"
+            cb = f"farm_buy_{key}"
+            
+        kb.append([InlineKeyboardButton(text=btn_txt, callback_data=cb)])
+    
+    kb.append([InlineKeyboardButton(text="🔙 Назад в Ферму", callback_data="farm_back")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+# ==========================================
+# ОБРАБОТЧИКИ: СИСТЕМНЫЕ
+# ==========================================
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject):
-    u = get_user(message.from_user.id)
+    u = db.get_user(message.from_user.id)
     
+    # Обработка рефералов
+    if command.args and command.args.startswith("promo_"):
+        code = command.args.split("_")[1]
+        await activate_promo_logic(message, code)
+        return
+
     if not u['registered']:
-        await message.answer("👋 <b>Привет!</b> Чтобы начать играть, нужно зарегистрироваться.\n\nВведите команду: /reg")
-        return
+        return await message.answer("👋 <b>Добро пожаловать в Vibe Bet!</b>\n\nДля начала игры необходимо пройти регистрацию.\nВведите команду: /reg")
+    
+    await send_main_interface(message)
 
-    # Referral/Promo processing
-    args = command.args
-    if args and args.startswith("promo_"):
-        code = args.split("_")[1]
-        await activate_promo(message, code)
-        return
-
-    await send_main_menu(message)
-
-async def send_main_menu(message: Message):
+async def send_main_interface(message: Message):
     txt = (
-        f"🖥 <b>VIBE BET MENU</b> | BTC: {format_num(btc_rate)}$\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "🎲 <b>Игры:</b> Рул, Кости, Футбол, Алмазы, Мины\n"
-        "⛏️ <b>Работа:</b> /work (Нужна лопата и детектор)\n"
-        "🏪 <b>Магазин:</b> /shop (Инструменты)\n"
-        "🖥 <b>Ферма:</b> Майнинг (Лимит 3 карты)\n"
-        "🎁 <b>Бонус:</b> Ежечасная халява\n"
-        "📈 <b>Курс BTC:</b> Меняется каждый час\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "👤 Профиль | 🆘 Помощь"
+        f"🖥 <b>ГЛАВНОЕ МЕНЮ VIBE BET</b>\n"
+        f"💸 Курс BTC: <b>{format_num(db.market_btc)} $</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🎲 <b>Игры:</b> Рул, Кости, Футбол, Алмазы, Мины\n"
+        f"⛏️ <b>Работа:</b> /work (Копать клад)\n"
+        f"🏪 <b>Магазин:</b> /shop (Инструменты)\n"
+        f"🔋 <b>Ферма:</b> Майнинг Биткоина\n"
+        f"🎁 <b>Бонус:</b> Ежечасная халява\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"👤 Профиль | 🆘 Помощь | 🎒 Инв"
     )
-    try: 
+    # Попытка отправить картинку
+    try:
         await message.answer_photo(FSInputFile("start_img.jpg"), caption=txt)
-    except: 
+    except:
         await message.answer(txt)
 
 @dp.message(Command("reg"))
 async def cmd_reg(message: Message):
-    u = get_user(message.from_user.id)
+    u = db.get_user(message.from_user.id)
     if u['registered']:
-        return await message.answer("✅ <b>Вы уже зарегистрированы!</b> Можете играть.")
+        return await message.answer("✅ <b>Вы уже зарегистрированы!</b>")
 
-    await message.answer("⏳ <b>Ваш аккаунт создается...</b>")
-    await asyncio.sleep(1.5)
+    await message.answer("📝 <b>Создаем аккаунт...</b>")
+    await asyncio.sleep(1.0)
     
-    # Check Subs
-    is_sub = await check_subscription(message.from_user.id)
-    if not is_sub:
-        kb = []
-        for ch in REQUIRED_CHANNELS:
-            kb.append([InlineKeyboardButton(text=f"Подписаться на {ch['username']}", url=ch['link'])])
-        kb.append([InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub_reg")])
-        
-        return await message.answer("🔒 <b>Для завершения регистрации подпишитесь на каналы:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    if not await check_subs(message.from_user.id):
+        return await message.answer(
+            "🔒 <b>Обязательная проверка!</b>\nПодпишитесь на каналы спонсоров:",
+            reply_markup=kb_sub_check()
+        )
     
     u['registered'] = True
-    await save_data()
-    await message.answer("✅ <b>Регистрация успешно завершена!</b>\nПриятной игры! Жмите /start")
+    await db.async_save()
+    await message.answer("✅ <b>Регистрация завершена!</b> Приятной игры!", reply_markup=None)
+    await send_main_interface(message)
 
-@dp.callback_query(F.data == "check_sub_reg")
-async def check_sub_reg_cb(call: CallbackQuery):
-    if await check_subscription(call.from_user.id):
-        u = get_user(call.from_user.id)
+@dp.callback_query(F.data == "reg_check_sub")
+async def cb_reg_check(call: CallbackQuery):
+    if await check_subs(call.from_user.id):
+        u = db.get_user(call.from_user.id)
         u['registered'] = True
-        await save_data()
+        await db.async_save()
         await call.message.delete()
-        await call.message.answer("✅ <b>Регистрация завершена!</b> Жмите /start")
+        await call.message.answer("✅ <b>Успешно!</b> Жмите /start")
     else:
-        await call.answer("❌ Вы не подписались на все каналы!", show_alert=True)
+        await call.answer("❌ Вы не подписаны!", show_alert=True)
 
 @dp.message(F.text.lower() == "помощь")
 async def cmd_help(message: Message):
     txt = (
-        "💎 <b>ЦЕНТР ПОМОЩИ</b>\n"
+        "📚 <b>СПРАВОЧНИК КОМАНД</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "🎰 <b>СТАВКИ:</b>\n"
-        "🔹 <code>Рул [сумма] [ставка]</code> (к, ч, з)\n"
-        "🔹 <code>Кости [сумма] [ставка]</code> (больше, меньше, равно)\n"
-        "🔹 <code>Футбол [сумма] [ставка]</code> (гол, мимо)\n"
-        "🔹 <code>Алмазы [сумма]</code>\n"
-        "🔹 <code>Мины [сумма]</code>\n\n"
-        "⚒️ <b>ЭКОНОМИКА:</b>\n"
-        "🔹 <code>/work</code> — Копать (30к-150к, шанс BTC)\n"
-        "🔹 <code>/shop</code> — Купить лопату и детектор\n"
-        "🔹 <code>Ферма</code> — Майнинг BTC\n"
-        "🔹 <code>Бонус</code> — Ежечасная награда\n\n"
-        "⚙️ <b>ПРОЧЕЕ:</b>\n"
-        "🔹 <code>Профиль</code>, <code>Топ</code>\n"
-        "🔹 <code>Перевести [ID] [Сумма]</code>\n"
-        "🔹 <code>/pr [код]</code> — Промокод\n"
+        "🎰 <b>АЗАРТНЫЕ ИГРЫ:</b>\n"
+        "• <code>Рул [сумма] [к/ч/з/число]</code> - Рулетка\n"
+        "• <code>Кости [сумма] [больше/меньше/равно]</code>\n"
+        "• <code>Футбол [сумма] [гол/мимо]</code>\n"
+        "• <code>Алмазы [сумма] [1/2]</code> - Сапер с бомбами\n"
+        "• <code>Мины [сумма]</code> - Классические мины\n\n"
+        "💰 <b>ЗАРАБОТОК:</b>\n"
+        "• <code>/work</code> или <code>Работа</code> - Искать клад\n"
+        "• <code>Ферма</code> - Управление видеокартами\n"
+        "• <code>Бонус</code> - Получить деньги (раз в час)\n\n"
+        "⚙️ <b>ПРОФИЛЬ:</b>\n"
+        "• <code>Профиль</code> - Статистика\n"
+        "• <code>Инв</code> - Инвентарь\n"
+        "• <code>/shop</code> - Покупка инструментов\n"
+        "• <code>Перевести [ID] [Сумма]</code> - Перевод игроку\n"
+        "• <code>Создать промо [код] [сумма] [кол-во]</code>\n"
+        "• <code>/pr [код]</code> - Ввод промокода"
     )
     await message.answer(txt)
 
-# --- SHOP COMMAND ---
-@dp.message(Command("shop"))
-async def cmd_shop(message: Message):
-    u = get_user(message.from_user.id)
-    kb = []
-    
-    if not u['shovel']:
-        kb.append([InlineKeyboardButton(text=f"🛒 Купить Лопату ({format_num(WORK_CONFIG['shovel_price'])}$)", callback_data="buy_tool_shovel")])
-    else:
-        kb.append([InlineKeyboardButton(text="✅ Лопата куплена", callback_data="ignore")])
-        
-    if not u['detector']:
-        kb.append([InlineKeyboardButton(text=f"📡 Купить Детектор ({format_num(WORK_CONFIG['detector_price'])}$)", callback_data="buy_tool_detector")])
-    else:
-        kb.append([InlineKeyboardButton(text="✅ Детектор куплен", callback_data="ignore")])
-        
-    await message.answer("🏪 <b>МАГАЗИН ИНСТРУМЕНТОВ</b>\nЛопата и Детектор нужны для работы (/work).", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+# ==========================================
+# ОБРАБОТЧИКИ: ЭКОНОМИКА И ПРОФИЛЬ
+# ==========================================
 
-@dp.callback_query(F.data.startswith("buy_tool_"))
-async def buy_tool_cb(call: CallbackQuery):
-    tool = call.data.split("_")[2]
-    u = get_user(call.from_user.id)
-    price = WORK_CONFIG[f"{tool}_price"]
+@dp.message(F.text.lower().in_({"профиль", "я", "profile", "stats"}))
+async def cmd_profile(message: Message):
+    u = db.get_user(message.from_user.id)
+    req_xp = get_level_req(u['lvl'])
     
-    if u['balance'] < price:
-        return await call.answer("❌ Недостаточно денег!", show_alert=True)
-    
-    u['balance'] -= price
-    u[tool] = 1
-    await save_data()
-    await call.answer(f"✅ {tool.capitalize()} куплен!", show_alert=True)
+    # Считаем стоимость фермы
+    farm_value = 0
+    for k, v in u['farm'].items():
+        if k in FARM_CONFIG:
+            farm_value += v * FARM_CONFIG[k]['price']
+            
+    txt = (
+        f"👤 <b>ЛИЧНОЕ ДЕЛО: {u['name']}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 ID: <code>{message.from_user.id}</code>\n"
+        f"💰 Баланс: <b>{format_num(u['balance'])} $</b>\n"
+        f"🪙 Криптокошелек: <b>{u['btc']:.6f} BTC</b> (~{format_num(u['btc'] * db.market_btc)}$)\n"
+        f"⭐ Уровень: <b>{u['lvl']}</b> [{u['xp']}/{req_xp} XP]\n"
+        f"🏭 Стоимость фермы: <b>{format_num(farm_value)} $</b>\n"
+        f"📅 В игре с: {datetime.fromtimestamp(u['reg_date']).strftime('%d.%m.%Y')}"
+    )
+    await message.answer(txt)
+
+@dp.message(F.text.lower().in_({"инв", "инвентарь", "inv"}))
+async def cmd_inventory(message: Message):
+    u = db.get_user(message.from_user.id)
+    inv = u['inventory']
+    txt = (
+        f"🎒 <b>ВАШ ИНВЕНТАРЬ</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🛠 Лопата: {'✅ Есть' if inv['shovel'] else '❌ Нет'}\n"
+        f"📡 Металлоискатель: {'✅ Есть' if inv['detector'] else '❌ Нет'}\n\n"
+        f"<i>Для работы используйте команду /work</i>"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏪 Перейти в магазин", callback_data="open_shop")]])
+    await message.answer(txt, reply_markup=kb)
+
+@dp.callback_query(F.data == "open_shop")
+async def open_shop_cb(call: CallbackQuery):
     await call.message.delete()
     await cmd_shop(call.message)
 
-# --- WORK (TREASURE HUNTER) ---
-@dp.message(F.text.lower().in_({"/work", "работа"}))
-async def cmd_work(message: Message):
-    u = get_user(message.from_user.id)
-    
-    # Check tools
-    if not u['shovel'] or not u['detector']:
-        return await message.answer("❌ <b>Ошибка работы!</b>\nДля работы нужны <b>Лопата</b> И <b>Металлоискатель</b>.\nКупите их в /shop")
+@dp.message(F.text.lower().in_({"shop", "магазин", "/shop"}))
+async def cmd_shop(message: Message):
+    u = db.get_user(message.from_user.id)
+    await message.answer("🏪 <b>МАГАЗИН ОБОРУДОВАНИЯ</b>\nЗдесь можно купить предметы для работы.", reply_markup=kb_shop(u))
 
-    # Cooldown
-    now = time.time()
-    if now - u['last_work'] < WORK_CONFIG['cooldown']:
-        rem = int(WORK_CONFIG['cooldown'] - (now - u['last_work']))
-        m, s = divmod(rem, 60)
-        return await message.answer(f"⏳ <b>Отдых!</b> Работать можно через: {m} мин {s} сек")
+@dp.callback_query(F.data.startswith("buy_tool_"))
+async def cb_buy_tool(call: CallbackQuery):
+    tool = call.data.split("_")[2]
+    u = db.get_user(call.from_user.id)
+    cfg = WORK_CONFIG['tools'][tool]
     
-    u['last_work'] = now
+    if u['balance'] < cfg['price']:
+        return await call.answer("❌ Недостаточно средств!", show_alert=True)
     
-    # Reward Logic
-    cash_reward = random.randint(WORK_CONFIG['reward_min'], WORK_CONFIG['reward_max'])
-    u['balance'] += cash_reward
+    u['balance'] -= cfg['price']
+    u['inventory'][tool] = True
+    await db.async_save()
     
-    # XP Logic
-    xp_gain = 4 * u['lvl'] # Custom logic if needed, user said "from 1-2 need 4 exp, from 2-3 8". This means gain is fixed or requirement is fixed?
-    # User said: "for each trip get 1-5 exp. from 1-2 need 4 exp, from 2-3 8, raise by 4 exp each lvl"
-    
-    gained_xp = random.randint(1, 5)
-    u['xp'] += gained_xp
-    
-    lvl_up = check_level_up(u)
-    
-    # BTC Drop
-    btc_found = 0
-    if random.random() < WORK_CONFIG['btc_chance']:
-        btc_found = random.uniform(WORK_CONFIG['btc_drop_range'][0], WORK_CONFIG['btc_drop_range'][1])
-        u['btc'] += btc_found
-    
-    await save_data()
-    
-    txt = (
-        f"⚒️ <b>СМЕНА ОКОНЧЕНА</b>\n"
-        f"💵 Заработано: <b>{format_num(cash_reward)} $</b>\n"
-        f"⭐ Опыт: <b>+{gained_xp} XP</b>\n"
-    )
-    if btc_found > 0:
-        txt += f"🎁 <b>ДЖЕКПОТ!</b> Вы нашли <b>{btc_found:.4f} BTC!</b>\n"
-    if lvl_up:
-        txt += f"🆙 <b>НОВЫЙ УРОВЕНЬ!</b> Теперь вы {u['lvl']} lvl!\n"
-        
-    await message.answer(txt)
-
-# --- ADMIN COMMANDS (REPLY SUPPORT) ---
-def get_target_id(message: Message, command: CommandObject):
-    if message.reply_to_message:
-        return message.reply_to_message.from_user.id
-    if command.args:
-        try:
-            return int(command.args.split()[0])
-        except: return None
-    return None
-
-@dp.message(Command("hhh"))
-async def admin_give_coins(message: Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS: return
-    target_id = get_target_id(message, command)
-    if not target_id: return await message.answer("⚠️ Reply or ID required")
-    
-    try:
-        amount = int(command.args.split()[-1]) # Last arg is amount
-        u = get_user(target_id)
-        u['balance'] += amount
-        await save_data()
-        await message.answer(f"✅ Выдано <b>{format_num(amount)} $</b> игроку {target_id}")
-        await bot.send_message(target_id, f"💳 Администратор выдал вам <b>{format_num(amount)} $</b>")
-    except: await message.answer("📝 `/hhh [ID] SUM` or Reply `/hhh SUM`")
-
-@dp.message(Command("hhhh"))
-async def admin_give_btc(message: Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS: return
-    target_id = get_target_id(message, command)
-    if not target_id: return
-    try:
-        amount = float(command.args.split()[-1])
-        u = get_user(target_id)
-        u['btc'] += amount
-        await save_data()
-        await message.answer(f"✅ Выдано <b>{amount} BTC</b>")
-    except: pass
-
-@dp.message(Command("ban"))
-async def admin_ban(message: Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS: return
-    target_id = get_target_id(message, command)
-    if target_id:
-        get_user(target_id)['banned'] = True
-        await save_data()
-        await message.answer(f"⛔ Игрок {target_id} забанен.")
-
-@dp.message(Command("unban"))
-async def admin_unban(message: Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS: return
-    target_id = get_target_id(message, command)
-    if target_id:
-        get_user(target_id)['banned'] = False
-        await save_data()
-        await message.answer(f"✅ Игрок {target_id} разбанен.")
-
-# --- PROFILE & BONUS ---
-@dp.message(F.text.lower().in_({"профиль", "я", "profile"}))
-async def cmd_profile(message: Message):
-    u = get_user(message.from_user.id)
-    req_xp = u['lvl'] * 4
-    txt = (
-        f"👤 <b>ПРОФИЛЬ: {u['name']}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 Баланс: <b>{format_num(u['balance'])} $</b>\n"
-        f"🪙 Биткоины: <b>{u['btc']:.8f} BTC</b> (~{format_num(u['btc']*btc_rate)}$)\n"
-        f"⭐ Уровень: <b>{u['lvl']}</b> ({u['xp']}/{req_xp} XP)\n"
-        f"🎒 Инструменты: {'✅' if u['shovel'] else '❌'} {'✅' if u['detector'] else '❌'}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"🆔 ID: <code>{message.from_user.id}</code>"
-    )
-    await message.answer(txt)
+    await call.message.edit_text(f"✅ <b>Успешно куплено: {cfg['name']}!</b>", reply_markup=None)
+    await call.message.answer("Теперь можно работать: /work")
 
 @dp.message(F.text.lower() == "бонус")
 async def cmd_bonus(message: Message):
-    u = get_user(message.from_user.id)
+    u = db.get_user(message.from_user.id)
     now = time.time()
     if now - u['last_bonus'] < 3600:
-        return await message.answer(f"⏳ Бонус раз в час!")
+        rem = int(3600 - (now - u['last_bonus']))
+        m, s = divmod(rem, 60)
+        return await message.answer(f"⏳ <b>Подождите:</b> {m} мин. {s} сек.")
     
-    base = random.randint(10000, 50000)
-    extra = u['lvl'] * 1000
-    total = base + extra
+    # Расчет бонуса от уровня
+    # Формула: База + (Лвл-1)*Шаг
+    reward = LEVEL_CONFIG['bonus_base'] + ((u['lvl'] - 1) * LEVEL_CONFIG['bonus_step'])
     
-    u['balance'] += total
+    u['balance'] += reward
     u['last_bonus'] = now
+    await db.async_save()
     
-    await save_data()
-    await message.answer(f"🎁 <b>Бонус: {format_num(total)} $</b>")
+    await message.answer(f"🎁 <b>Ежечасный бонус получен!</b>\n➕ {format_num(reward)} $\n<i>(Чем выше уровень, тем больше бонус!)</i>")
 
 @dp.message(F.text.lower().startswith("перевести"))
 async def cmd_transfer(message: Message):
     try:
         args = message.text.split()
-        target_id = int(args[1])
-        amount = parse_amount(args[2], get_user(message.from_user.id)['balance'])
-        
-        sender = get_user(message.from_user.id)
-        if not amount or amount <= 0 or amount > sender['balance']: return await message.answer("❌ Ошибка суммы")
-        
-        receiver = get_user(target_id)
-        sender['balance'] -= amount
-        receiver['balance'] += amount
-        await save_data()
-        await message.answer("✅ Перевод успешен!")
-        await bot.send_message(target_id, f"💸 Вам пришло {format_num(amount)} $")
-    except: pass
-
-@dp.message(Command("pr"))
-async def cmd_pr(message: Message, command: CommandObject):
-    if not command.args: return
-    await activate_promo(message, command.args)
-
-async def activate_promo(message: Message, code: str):
-    u = get_user(message.from_user.id)
-    if code in promos and code not in u['used_promos'] and promos[code]['uses'] > 0:
-        promos[code]['uses'] -= 1
-        r = promos[code]['reward']
-        u['balance'] += r
-        u['used_promos'].append(code)
-        await save_data()
-        await message.answer(f"✅ Промокод на {format_num(r)} $ активирован!")
-    else:
-        await message.answer("❌ Неверный или использованный код.")
-
-@dp.message(F.text.lower().startswith("создать промо"))
-async def cmd_create_promo(message: Message):
-    if message.from_user.id not in ADMIN_IDS: return
-    try:
-        args = message.text.split()
-        code, reward, uses = args[2], int(args[3]), int(args[4])
-        promos[code] = {"reward": reward, "uses": uses}
-        await save_data()
-        await message.answer(f"✅ Промокод `{code}` создан.")
-    except: pass
-
-# ================= GAMES =================
-
-# --- ROULETTE ---
-@dp.message(F.text.lower().startswith("рул"))
-async def game_roul(message: Message):
-    u = get_user(message.from_user.id)
-    args = message.text.lower().split()
-    try:
         if len(args) < 3: raise ValueError
-        bet = parse_amount(args[1], u['balance'])
-        c = args[2] # choice
         
-        # Normalize input
-        if c in ["кр", "к", "red", "красный", "крас"]: choice = "red"
-        elif c in ["ч", "чер", "black", "черный", "черн"]: choice = "black"
-        elif c in ["з", "зел", "green", "зеленый"]: choice = "green"
-        elif c in ["чет", "even"]: choice = "even"
-        elif c in ["нечет", "odd"]: choice = "odd"
-        elif c.isdigit() and 0 <= int(c) <= 36: choice = int(c)
-        else: return await message.answer("❌ Ставка: кр, чер, зел, чет, нечет, 0-36")
-
-        if not bet or bet < 10 or bet > u['balance']: return await message.answer("❌ Неверная ставка!")
-        
-        u['balance'] -= bet
-        n = random.randint(0, 36)
-        
-        # Determine result properties
-        if n == 0: color = "green"
-        elif n in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]: color = "red"
-        else: color = "black"
-        parity = "even" if n != 0 and n % 2 == 0 else "odd" if n != 0 else ""
-        
-        win = 0
-        if choice == "red" and color == "red": win = bet * 2
-        elif choice == "black" and color == "black": win = bet * 2
-        elif choice == "green" and color == "green": win = bet * 14
-        elif choice == "even" and parity == "even": win = bet * 2
-        elif choice == "odd" and parity == "odd": win = bet * 2
-        elif isinstance(choice, int) and choice == n: win = bet * 36
-        
-        u['balance'] += win
-        
-        col_disp = "🔴" if color == "red" else "⚫" if color == "black" else "🟢"
-        res_text = f"🎉 <b>Выигрыш: {format_num(win)} $</b>" if win > 0 else "❌ <b>Проигрыш</b>"
-        
-        await message.reply(
-            f"🎰 <b>Рулетка</b>\n"
-            f"Выпало: {col_disp} <b>{n}</b>\n"
-            f"{res_text}\n"
-            f"💰 Баланс: {format_num(u['balance'])} $"
-        )
-        await save_data()
-    except Exception: 
-        await message.answer("❌ Ошибка! Используйте: <code>рул 10к кр</code>")
-
-# --- КОСТИ ---
-@dp.message(F.text.lower().startswith("кости"))
-async def game_dice_real(message: Message):
-    u = get_user(message.from_user.id)
-    args = message.text.lower().split()
+        target_id = int(args[1])
+        amount = parse_
+        def parse_money(text: str, user_balance: int) -> Optional[int]:
+    """
+    Профессиональный парсер денежных сумм.
+    Поддерживает сокращения: к, кк, ккк, вабанк.
+    """
     try:
-        bet = parse_amount(args[1], u['balance'])
-        outcome = args[2]
+        text = str(text).lower().strip().replace(",", ".")
+        if text in ["все", "всё", "all", "вабанк", "max", "баланс"]:
+            return int(user_balance)
         
-        if outcome in ["равно", "=", "7"]: type_ = "eq"
-        elif outcome in ["больше", "б", ">"]: type_ = "over"
-        elif outcome in ["меньше", "м", "<"]: type_ = "under"
-        else: return await message.answer("❌ Ставки: больше, меньше, равно")
-        
-        if not bet or bet < 10 or bet > u['balance']: return await message.answer("❌ Недостаточно средств!")
-        
-        u['balance'] -= bet
-        m1 = await message.answer_dice("🎲")
-        m2 = await message.answer_dice("🎲")
-        await asyncio.sleep(3.5)
-        
-        val = m1.dice.value + m2.dice.value
-        win_mult = 0
-        if type_ == "eq" and val == 7: win_mult = 5.0
-        elif type_ == "over" and val > 7: win_mult = 2.0
-        elif type_ == "under" and val < 7: win_mult = 2.0
-        
-        win = int(bet * win_mult)
-        u['balance'] += win
-        res = "🎉 Победа" if win > 0 else "❌ Проигрыш"
-        
-        await message.reply(f"🎲 Сумма: <b>{val}</b>\n{res}: {format_num(win)}$\n💰 Баланс: {format_num(u['balance'])}$")
-        await save_data()
-    except: await message.answer("📝 Пример: <code>Кости 1000 больше</code>")
-
-# --- АЛМАЗЫ (FIXED) ---
-@dp.message(F.text.lower().startswith("алмазы"))
-async def game_dia_start(message: Message):
-    u = get_user(message.from_user.id)
-    try:
-        bet = parse_amount(message.text.split()[1], u['balance'])
-        if not bet or bet < 10 or bet > u['balance']: return await message.answer("❌ Недостаточно средств!")
-        
-        u['balance'] -= bet
-        gid = f"dm_{message.from_user.id}_{int(time.time())}"
-        
-        # Начальный множитель на 2-й ход будет 1.21
-        active_games[gid] = {
-            "type": "dm", "uid": message.from_user.id, "bet": bet, 
-            "round": 0, "mult": 1.21, "history": []
+        # Обработка буквенных множителей
+        multipliers = {
+            "кккк": 1_000_000_000_000,
+            "ккк": 1_000_000_000,
+            "кк": 1_000_000,
+            "к": 1_000
         }
         
-        await message.answer(
-            f"💎 <b>АЛМАЗЫ</b>\n💰 Ставка: {format_num(bet)} $\n👇 Выберите ячейку (раунд 1):", 
-            reply_markup=get_dia_kb(gid, 0)
+        for suffix, factor in multipliers.items():
+            if text.endswith(suffix):
+                num_part = text[:-len(suffix)]
+                return int(float(num_part) * factor)
+        
+        # Обычное число
+        val = int(float(text))
+        return val if val > 0 else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+# ==========================================
+# СИСТЕМА ПОДПИСОК И ПРОВЕРОК
+# ==========================================
+
+async def check_subs(user_id: int) -> bool:
+    """Проверка подписки пользователя на обязательные каналы спонсоров"""
+    for channel in REQUIRED_CHANNELS:
+        try:
+            member = await bot.get_chat_member(chat_id=channel["username"], user_id=user_id)
+            if member.status in ['left', 'kicked', 'restricted']:
+                logger.info(f"User {user_id} NOT subscribed to {channel['username']}")
+                return False
+        except Exception as e:
+            logger.error(f"Error checking sub for {user_id} on {channel['username']}: {e}")
+            # Если бот не имеет прав в канале, считаем что подписка есть, чтобы не ломать игру
+            continue 
+    return True
+
+# ==========================================
+# ЛОГИКА УРОВНЕЙ И ОПЫТА
+# ==========================================
+
+def get_level_req(lvl: int) -> int:
+    """Расчет необходимого опыта для следующего уровня (прогрессивная шкала)"""
+    return lvl * LEVEL_CONFIG["xp_step"]
+
+def add_exp(u: dict, amount: int) -> bool:
+    """Добавление опыта и проверка повышения уровня"""
+    u['xp'] += amount
+    leveled_up = False
+    
+    # Цикл на случай, если опыта пришло сразу на несколько уровней
+    while u['xp'] >= get_level_req(u['lvl']):
+        u['xp'] -= get_level_req(u['lvl'])
+        u['lvl'] += 1
+        leveled_up = True
+        logger.info(f"User {u.get('name')} reached level {u['lvl']}")
+    
+    return leveled_up
+
+# ==========================================
+# ИНТЕРФЕЙСЫ И КЛАВИАТУРЫ (UI/UX)
+# ==========================================
+
+def get_shop_kb(u: dict) -> InlineKeyboardMarkup:
+    """Динамическая клавиатура магазина на основе инвентаря"""
+    builder = []
+    inv = u.get('inventory', {})
+    
+    # Инструменты для работы
+    for item_id, item_data in WORK_CONFIG['tools'].items():
+        status = "✅ Куплено" if inv.get(item_id) else f"🛒 Купить за {format_num(item_data['price'])}$"
+        callback = "ignore" if inv.get(item_id) else f"buy_tool_{item_id}"
+        builder.append([InlineKeyboardButton(text=f"{item_data['name']} | {status}", callback_data=callback)])
+    
+    return InlineKeyboardMarkup(inline_keyboard=builder)
+
+def get_farm_kb(u: dict) -> InlineKeyboardMarkup:
+    """Клавиатура управления фермой"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💰 Собрать прибыль", callback_data="farm_collect")],
+        [InlineKeyboardButton(text="🛒 Магазин видеокарт", callback_data="farm_shop_open")],
+        [InlineKeyboardButton(text="🔄 Обновить данные", callback_data="farm_refresh")]
+    ])
+
+# ==========================================
+# ОБРАБОТЧИКИ КОМАНД (HANDLERS)
+# ==========================================
+
+@dp.message(Command("reg"))
+async def cmd_registration(message: Message):
+    """Процесс регистрации нового пользователя"""
+    u = db.get_user(message.from_user.id, message.from_user.first_name)
+    
+    if u['registered']:
+        return await message.answer("✅ Вы уже являетесь участником системы!")
+
+    if not await check_subs(message.from_user.id):
+        kb = []
+        for ch in REQUIRED_CHANNELS:
+            kb.append([InlineKeyboardButton(text=f"Подписаться на {ch['username']}", url=ch['link'])])
+        kb.append([InlineKeyboardButton(text="💎 Я ПОДПИСАЛСЯ", callback_data="check_reg_sub")])
+        
+        return await message.answer(
+            "⚠️ <b>Доступ ограничен!</b>\n\nДля регистрации подпишитесь на наши каналы:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb)
         )
-        await save_data()
-    except: await message.answer("📝 Пример: <code>Алмазы 1000</code>")
-
-def get_dia_kb(gid, round_num, finished=False, dead_idx=None):
-    btns = []
-    row = []
-    for i in range(3):
-        txt = "📦"
-        cb = f"dm_go_{gid}_{i}"
-        if finished:
-            txt = "💀" if i == dead_idx else "💎"
-            cb = "ignore"
-        row.append(InlineKeyboardButton(text=txt, callback_data=cb))
-    btns.append(row)
     
-    if not finished:
-        if round_num == 0:
-            btns.append([InlineKeyboardButton(text="🔙 ОТМЕНИТЬ ИГРУ", callback_data=f"dm_cancel_{gid}")])
-        else:
-            btns.append([InlineKeyboardButton(text="💰 ЗАБРАТЬ ВЫИГРЫШ", callback_data=f"dm_take_{gid}")])
-    return InlineKeyboardMarkup(inline_keyboard=btns)
+    u['registered'] = True
+    await db.async_save()
+    await message.answer(f"🎉 <b>Поздравляем, {u['name']}!</b>\nВаш аккаунт успешно создан. Вам начислено 5,000$ стартового капитала.\n\nИспользуйте /start для входа в меню.")
 
-@dp.callback_query(F.data.startswith("dm_"))
-async def dia_handler(call: CallbackQuery):
-    parts = call.data.split("_")
-    action = parts[1]
-    gid = "_".join(parts[2:-1]) if action == "go" else "_".join(parts[2:])
-    game = active_games.get(gid)
-    if not game: return await call.answer("Игра не найдена")
+@dp.message(F.text.lower().in_({"профиль", "статистика", "stats"}))
+async def show_profile(message: Message):
+    """Вывод детальной статистики игрока"""
+    u = db.get_user(message.from_user.id)
     
-    if action == "cancel":
-        get_user(game['uid'])['balance'] += game['bet']
-        del active_games[gid]
-        await call.message.edit_text("✅ Игра отменена, ставка возвращена.")
-        return
-
-    if action == "take":
-        current_win = int(game['bet'] * (game['mult'] - 0.35))
-        get_user(game['uid'])['balance'] += current_win
-        await call.message.edit_text(f"💰 <b>Вы забрали: {format_num(current_win)} $</b>")
-        del active_games[gid]
-        await save_data()
-        return
-
-    if action == "go":
-        dead = random.randint(0, 2)
-        idx = int(parts[-1])
-        
-        if idx == dead:
-            await call.message.edit_text(f"💀 <b>Бомба!</b> Вы проиграли {format_num(game['bet'])} $", 
-                                         reply_markup=get_dia_kb(gid, 0, True, dead))
-            del active_games[gid]
-        else:
-            m = game['mult']
-            game['mult'] += 0.35
-            game['round'] += 1
-            await call.message.edit_text(
-                f"💎 <b>Успех! Раунд {game['round']}</b>\nМножитель: <b>x{m:.2f}</b>\nТекущий выигрыш: <b>{format_num(int(game['bet']*m))} $</b>",
-                reply_markup=get_dia_kb(gid, game['round'])
-            )
-        await save_data()
-
-# --- МИНЫ (FIXED) ---
-@dp.message(F.text.lower().startswith("мины"))
-async def game_mines_start(message: Message):
-    u = get_user(message.from_user.id)
-    try:
-        bet = parse_amount(message.text.split()[1], u['balance'])
-        if bet < 10 or bet > u['balance']: return await message.answer("❌ Недостаточно средств!")
-        
-        u['balance'] -= bet
-        grid = [False]*25
-        mines = random.sample(range(25), 3)
-        for m in mines: grid[m] = True
-        
-        gid = f"mn_{message.from_user.id}_{int(time.time())}"
-        active_games[gid] = {"type":"mines", "uid":message.from_user.id, "bet":bet, "grid":grid, "opened":[False]*25, "mult":1.0}
-        
-        await message.answer(f"💣 <b>МИНЫ</b>\nСтавка: {format_num(bet)}$", 
-                             reply_markup=get_mines_kb(gid, [False]*25))
-        await save_data()
-    except: await message.answer("📝 Пример: <code>Мины 1000</code>")
-
-def get_mines_kb(gid, opened, finish=False, grid=None):
-    kb = []
-    for r in range(5):
-        row = []
-        for c in range(5):
-            idx = r*5+c
-            txt = "⬜️"
-            cbd = f"mn_click_{gid}_{idx}"
-            if opened[idx]: txt = "💎"; cbd = "ignore"
-            if finish:
-                cbd = "ignore"
-                if grid[idx]: txt = "💣"
-                elif opened[idx]: txt = "💎"
-                else: txt = "🔹"
-            row.append(InlineKeyboardButton(text=txt, callback_data=cbd))
-        kb.append(row)
-    if not finish: kb.append([InlineKeyboardButton(text="💰 ЗАБРАТЬ", callback_data=f"mn_stop_{gid}")])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-@dp.callback_query(F.data.startswith("mn_"))
-async def mines_callback(call: CallbackQuery):
-    data = call.data.split("_")
-    action = data[1]
-    gid = "_".join(data[2:-1]) if action == "click" else "_".join(data[2:])
-    game = active_games.get(gid)
-    if not game: return
+    # Расчет прогресса уровня
+    req = get_level_req(u['lvl'])
+    progress_bar = "🟢" * int((u['xp']/req)*10) + "⚪" * (10 - int((u['xp']/req)*10))
     
-    if action == "stop":
-        win = int(game['bet'] * game['mult'])
-        get_user(game['uid'])['balance'] += win
-        await call.message.edit_text(f"💰 <b>Выигрыш: {format_num(win)} $</b>", 
-                                     reply_markup=get_mines_kb(gid, game['opened'], True, game['grid']))
-        del active_games[gid]
-        await save_data()
-        return
-
-    idx = int(data[-1])
-    if game['grid'][idx]:
-        await call.message.edit_text(f"💥 <b>БА-БАХ!</b> Вы проиграли ставку.", 
-                                     reply_markup=get_mines_kb(gid, game['opened'], True, game['grid']))
-        del active_games[gid]
-    else:
-        game['opened'][idx] = True
-        game['mult'] += 0.35
-        await call.message.edit_text(f"💎 <b>МИНЫ</b> | x{game['mult']:.2f}", reply_markup=get_mines_kb(gid, game['opened']))
-    await save_data()
-
-# --- ФЕРМА (FIXED) ---
-def get_farm_stats(u):
-    now = time.time()
-    last = u['farm'].get('last_collect', now)
-    btc_hour = 0
-    for k, v in FARM_CONFIG.items():
-        btc_hour += u['farm'].get(k, 0) * v['income']
-    pending = (btc_hour / 3600) * (now - last)
-    return pending, btc_hour
-
-@dp.message(F.text.lower() == "ферма")
-async def cmd_farm(message: Message):
-    u = get_user(message.from_user.id)
-    pending, hourly = get_farm_stats(u)
-    txt = (
-        f"🖥 <b>ВАША ФЕРМА</b>\n"
+    text = (
+        f"👤 <b>ПРОФИЛЬ: {u['name']}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"💳 RTX 3060: {u['farm'].get('rtx3060', 0)}/3\n"
-        f"💳 RTX 4070: {u['farm'].get('rtx4070', 0)}/3\n"
-        f"💳 RTX 4090: {u['farm'].get('rtx4090', 0)}/3\n\n"
-        f"⛏️ Майнинг: <b>{hourly:.6f} BTC/ч</b>\n"
-        f"💰 Доход: <b>{pending:.8f} BTC</b>"
+        f"💰 Баланс: <code>{format_num(u['balance'])} $</code>\n"
+        f"🪙 Биткоины: <code>{u['btc']:.6f} BTC</code>\n"
+        f"⭐ Уровень: <b>{u['lvl']}</b>\n"
+        f"📊 Опыт: [{progress_bar}] {u['xp']}/{req}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📅 Регистрация: {datetime.fromtimestamp(u['reg_date']).strftime('%d.%m.%Y')}\n"
+        f"🕹 Игр сыграно: {u['stats'].get('games_played', 0)}\n"
+        f"🏆 Побед: {u['stats'].get('won', 0)}"
     )
-    kb = [
-        [InlineKeyboardButton(text="💰 Собрать доход", callback_data="farm_menu_collect")],
-        [InlineKeyboardButton(text="🛒 Магазин карт", callback_data="farm_menu_shop")]
-    ]
-    await message.answer(txt, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await message.answer(text)
 
-@dp.callback_query(F.data == "farm_menu_collect")
-async def farm_coll_menu(call: CallbackQuery):
-    pending, _ = get_farm_stats(get_user(call.from_user.id))
-    kb = [[InlineKeyboardButton(text="✅ Подтвердить", callback_data="farm_do_collect")],
-          [InlineKeyboardButton(text="🔙 Назад", callback_data="farm_back")]]
-    await call.message.edit_text(f"💰 Доступно: {pending:.8f} BTC\nЖелаете собрать?", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.callback_query(F.data == "farm_do_collect")
-async def farm_do_coll(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-    pending, _ = get_farm_stats(u)
-    if pending < 0.00000001: return await call.answer("⚠️ Пусто!")
-    u['btc'] += pending
-    u['farm']['last_collect'] = time.time()
-    await save_data()
-    await call.answer("✅ Доход собран!")
-    await farm_back(call)
-
-@dp.callback_query(F.data == "farm_menu_shop")
-async def farm_shop(call: CallbackQuery):
-    u = get_user(call.from_user.id)
-    kb = []
-    for k, v in FARM_CONFIG.items():
-        count = u['farm'].get(k, 0)
-        price = int(v['base_price'] * (1.2 ** count))
-        btn_text = f"{v['name']} ({count}/3) - {format_num(price)}$"
-        kb.append([InlineKeyboardButton(text=btn_text, callback_data=f"farm_buy_{k}")])
-    kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="farm_back")])
-    await call.message.edit_text("🛍 <b>МАГАЗИН ВИДЕОКАРТ</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.callback_query(F.data.startswith("farm_buy_"))
-async def farm_buy_act(call: CallbackQuery):
-    item = call.data.split("_")[2]
-    u = get_user(call.from_user.id)
-    count = u['farm'].get(item, 0)
-    if count >= 3: return await call.answer("❌ Лимит 3 карты!", show_alert=True)
+@dp.message(F.text.lower().startswith("перевести"))
+async def transfer_money(message: Message):
+    """Безопасный перевод денег между игроками"""
+    u = db.get_user(message.from_user.id)
+    args = message.text.split()
     
-    price = int(FARM_CONFIG[item]['base_price'] * (1.2 ** count))
-    if u['balance'] < price: return await call.answer("❌ Нет денег!", show_alert=True)
+    if len(args) < 3:
+        return await message.answer("📝 Формат: <code>Перевести [ID] [Сумма]</code>\nID можно узнать в профиле игрока.")
     
-    u['balance'] -= price
-    u['farm'][item] = count + 1
-    await save_data()
-    await call.answer("✅ Куплено!")
-    await farm_shop(call)
+    try:
+        target_id = int(args[1])
+        amount = parse_money(args[2], u['balance'])
+        
+        if not amount or amount <= 0:
+            return await message.answer("❌ Укажите корректную сумму для перевода.")
+            
+        if amount > u['balance']:
+            return await message.answer(f"❌ Недостаточно средств! Ваш баланс: {format_num(u['balance'])}$")
+            
+        if target_id == message.from_user.id:
+            return await message.answer("🤔 Зачем переводить деньги самому себе?")
+            
+        if target_id not in db.users:
+            return await message.answer("❌ Пользователь с таким ID не найден в нашей базе данных.")
+            
+        target_user = db.get_user(target_id)
+        
+        # Выполнение транзакции
+        u['balance'] -= amount
+        target_user['balance'] += amount
+        
+        await db.async_save()
+        
+        await message.answer(f"✅ <b>Перевод выполнен!</b>\nОтправлено: {format_num(amount)}$\nПолучатель: {target_user['name']}")
+        
+        try:
+            await bot.send_message(target_id, f"💰 Вам поступил перевод: <b>{format_num(amount)}$</b>\nОтправитель: {u['name']} (ID: {message.from_user.id})")
+        except:
+            pass # Пользователь мог заблокировать бота
+            
+    except ValueError:
+        await message.answer("❌ ID должен быть числом.")
 
-@dp.callback_query(F.data == "farm_back")
-async def farm_back(call: CallbackQuery):
-    await call.message.delete()
-    await cmd_farm(call.message)
+# ==========================================
+# ИГРОВЫЕ МОДУЛИ (GAMES)
+# ==========================================
 
-# --- ТОП ---
-@dp.message(F.text.lower() == "топ")
-async def cmd_top(message: Message):
-    sorted_users = sorted(users.items(), key=lambda i: i[1]['balance'], reverse=True)[:10]
-    txt = "🏆 <b>ТОП 10 МАЖОРОВ:</b>\n\n"
-    for i, (uid, u) in enumerate(sorted_users):
-        txt += f"{i+1}. {u['name']} — <b>{format_num(u['balance'])} $</b>\n"
-    await message.answer(txt)
+@dp.message(F.text.lower().startswith("рул"))
+async def game_roulette(message: Message):
+    """Классическая рулетка"""
+    u = db.get_user(message.from_user.id)
+    args = message.text.lower().split()
+    
+    if len(args) < 3:
+        return await message.answer("🎰 <b>РУЛЕТКА</b>\nИспользование: <code>Рул [сумма] [цвет/число]</code>\nЦвета: к, ч, з\nЧисла: 0-36")
+        
+    bet = parse_money(args[1], u['balance'])
+    if not bet or bet < 10: return await message.answer("❌ Минимальная ставка — 10$.")
+    if bet > u['balance']: return await message.answer("❌ Недостаточно средств.")
+    
+    target = args[2]
+    u['balance'] -= bet
+    u['stats']['games_played'] = u['stats'].get('games_played', 0) + 1
+    
+    res_n = random.randint(0, 36)
+    res_color = "зеленый" if res_n == 0 else "красный" if res_n in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "черный"
+    
+    win = 0
+    # Логика проверки
+    if target in ['к', 'красный', 'red'] and res_color == "красный": win = bet * 2
+    elif target in ['ч', 'черный', 'black'] and res_color == "черный": win = bet * 2
+    elif target in ['з', 'зеленый', 'green'] and res_color == "зеленый": win = bet * 14
+    elif target.isdigit() and int(target) == res_n: win = bet * 36
+    
+    u['balance'] += win
+    if win > 0: u['stats']['won'] = u['stats'].get('won', 0) + 1
+    
+    color_emoji = "🔴" if res_color == "красный" else "⚫" if res_color == "черный" else "🟢"
+    result_text = f"🎉 ВЫИГРЫШ: <b>{format_num(win)}$</b>" if win > 0 else "💀 ПРОИГРЫШ"
+    
+    await message.reply(
+        f"🎰 Крутим колесо...\n"
+        f"📈 Выпало: {color_emoji} <b>{res_n} ({res_color})</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"{result_text}\n"
+        f"💰 Баланс: {format_num(u['balance'])}$"
+    )
+    await db.async_save()
 
-# --- АДМИН-КОМАНДЫ (С REPLAY) ---
-def get_admin_target(message, command):
-    if message.reply_to_message: return message.reply_to_message.from_user.id
-    if command.args:
-        try: return int(command.args.split()[0])
-        except: return None
-    return None
+# ==========================================
+# СИСТЕМА ПРОМОКОДОВ
+# ==========================================
+
+@dp.message(F.text.lower().startswith("создать промо"))
+async def admin_create_promo(message: Message):
+    """Создание промокода (доступно всем по вашему запросу)"""
+    try:
+        parts = message.text.split()
+        name = parts[2].upper()
+        reward = parse_money(parts[3], 0)
+        uses = int(parts[4])
+        
+        if name in db.promos:
+            return await message.answer("❌ Такой промокод уже существует.")
+            
+        db.promos[name] = {
+            "reward": reward,
+            "uses": uses,
+            "creator": message.from_user.id
+        }
+        await db.async_save()
+        await message.answer(f"🎁 Промокод <code>{name}</code> успешно создан!\nНаграда: {format_num(reward)}$\nКол-во активаций: {uses}")
+    except:
+        await message.answer("📝 Формат: <code>Создать промо [КОД] [СУММА] [КОЛ-ВО]</code>")
+
+@dp.message(Command("pr"))
+async def use_promo(message: Message, command: CommandObject):
+    """Активация промокода"""
+    if not command.args:
+        return await message.answer("📝 Введите код: <code>/pr КОД</code>")
+        
+    code = command.args.upper()
+    u = db.get_user(message.from_user.id)
+    
+    if code not in db.promos:
+        return await message.answer("❌ Такого промокода не существует.")
+        
+    promo = db.promos[code]
+    if promo['uses'] <= 0:
+        return await message.answer("❌ Активации данного промокода закончились.")
+        
+    if code in u.get('used_promos', []):
+        return await message.answer("❌ Вы уже активировали этот промокод!")
+        
+    u['balance'] += promo['reward']
+    promo['uses'] -= 1
+    if 'used_promos' not in u: u['used_promos'] = []
+    u['used_promos'].append(code)
+    
+    await db.async_save()
+    await message.answer(f"✅ <b>Успех!</b>\nВы получили <b>{format_num(promo['reward'])}$</b>")
+
+# ==========================================
+# АДМИН-ПАНЕЛЬ (SECRET)
+# ==========================================
 
 @dp.message(Command("hhh"))
-async def adm_give_money(message: Message, command: CommandObject):
+async def admin_give_bal(message: Message, command: CommandObject):
+    """Выдача баланса админом (ID 1997428703)"""
     if message.from_user.id not in ADMIN_IDS: return
-    tid = get_admin_target(message, command)
-    if not tid: return
+    
     try:
-        val = int(command.args.split()[-1])
-        get_user(tid)['balance'] += val
-        await save_data()
-        await message.answer(f"✅ Выдано {format_num(val)}$")
-    except: pass
+        # Если команда дана ответом на сообщение
+        if message.reply_to_message:
+            target_id = message.reply_to_message.from_user.id
+            amount = parse_money(command.args, 0)
+        else:
+            args = command.args.split()
+            target_id = int(args[0])
+            amount = parse_money(args[1], 0)
+            
+        t_user = db.get_user(target_id)
+        t_user['balance'] += amount
+        await db.async_save()
+        await message.answer(f"💎 Администратор выдал {format_num(amount)}$ игроку {t_user['name']}")
+    except:
+        await message.answer("📝 <code>/hhh [ID] [СУММА]</code> или ответом на сообщение.")
 
-@dp.message(Command("hhhh"))
-async def adm_give_btc(message: Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS: return
-    tid = get_admin_target(message, command)
-    if not tid: return
-    try:
-        val = float(command.args.split()[-1])
-        get_user(tid)['btc'] += val
-        await save_data()
-        await message.answer(f"✅ Выдано {val} BTC")
-    except: pass
+# ==========================================
+# ЗАПУСК БОТА (STARTUP)
+# ==========================================
 
-@dp.message(Command("ban"))
-async def adm_ban(message: Message, command: CommandObject):
-    if message.from_user.id not in ADMIN_IDS: return
-    tid = get_admin_target(message, command)
-    if tid:
-        get_user(tid)['banned'] = True
-        await save_data()
-        await message.answer("⛔ Пользователь забанен.")
+async def background_tasks():
+    """Задачи, выполняемые в фоновом режиме"""
+    while True:
+        try:
+            # Обновление курса биткоина раз в час
+            db.market_btc = random.randint(15000, 180000)
+            # Авто-сохранение данных
+            await db.async_save()
+            logger.info("Background tasks executed: BTC price updated & DB saved.")
+        except Exception as e:
+            logger.error(f"Error in background task: {e}")
+        await asyncio.sleep(3600)
 
-# --- ЗАПУСК ---
 async def main():
-    sync_load()
-    # Обновление рынка BTC каждый час
-    scheduler.add_job(update_btc_market, 'interval', hours=1)
-    scheduler.start()
+    """Главная функция инициализации"""
+    print("--- STARTING VIBE BET SYSTEM ---")
     
+    # 1. Загрузка базы данных
+    db.load()
+    
+    # 2. Запуск фоновых задач
+    asyncio.create_task(background_tasks())
+    
+    # 3. Настройка Web-сервера для предотвращения сна (Render)
     app = web.Application()
-    app.router.add_get("/", lambda r: web.Response(text="Running"))
-    runner = web.AppRunner(app); await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", PORT).start()
+    app.router.add_get("/", lambda r: web.Response(text="Bot is running!"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
     
+    # 4. Удаление старых обновлений и запуск Polling
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot turned off manually")
+    except Exception as e:
+        print(f"CRITICAL ERROR: {e}")

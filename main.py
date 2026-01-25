@@ -1334,7 +1334,8 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
         expires_text = "Без срока" if not expires_at else expires_at.strftime('%d.%m.%Y %H:%M')
         
         result_text = f"""
-✅ *ПРОМОКОД СОЗДАН!*
+        await update.message.reply_text("✅ *ПРОМОКОД СОЗДАН!*", parse_mode=ParseMode.MARKDOWN)
+
 
 🎫 Код: `{promo_code}`
 💎 Тип: {type_names.get(promo.promo_type, promo.promo_type)}

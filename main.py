@@ -1,6 +1,3 @@
-# bot_complete.py - ПОЛНЫЙ КОД VIBE BET БОТА С SUPABASE
-# БЛОК 1/6: Инициализация и конфигурация для Supabase
-
 import logging
 import json
 import random

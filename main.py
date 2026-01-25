@@ -506,6 +506,7 @@ class Database:
     async def use_promo_code(self, code: str, user_id: int):
     """Использование промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     async with self.get_connection() as conn:
+        # Проверяем, использовал ли уже пользователь этот промокод
         used = await conn.fetchrow(
             'SELECT id FROM promo_uses WHERE promo_code = $1 AND user_id = $2',
             code, user_id
@@ -526,16 +527,19 @@ class Database:
         if promo.current_uses >= promo.max_uses:
             return False, "❌ Лимит использований промокода исчерпан!", {}
         
+        # Обновляем счетчик использований
         await conn.execute(
             'UPDATE promo_codes SET current_uses = current_uses + 1 WHERE code = $1',
             code
         )
         
+        # Записываем использование
         await conn.execute(
             'INSERT INTO promo_uses (promo_code, user_id, used_at) VALUES ($1, $2, $3)',
             code, user_id, datetime.datetime.now()
         )
         
+        # Возвращаем данные для начисления бонуса
         return True, "✅ Промокод успешно активирован!", {
             "type": promo.promo_type,
             "value": promo.value

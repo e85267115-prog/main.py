@@ -2826,72 +2826,45 @@ def main():
     
     load_data()
     
-    app = Application.builder().token(TOKEN).build()
+    # Для версии 13.x используем другой подход
+    updater = Updater(TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
     
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", show_main_menu))
-    app.add_handler(CommandHandler("bonus", bonus_command))
-    app.add_handler(CommandHandler("work", work_command))
-    app.add_handler(CommandHandler("profile", show_profile))
+    # Команды
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("menu", show_main_menu))
+    dispatcher.add_handler(CommandHandler("bonus", bonus_command))
+    dispatcher.add_handler(CommandHandler("work", work_command))
+    dispatcher.add_handler(CommandHandler("profile", show_profile))
     
-    app.add_handler(CallbackQueryHandler(register_callback, pattern="^register$"))
-    app.add_handler(CallbackQueryHandler(show_main_menu, pattern="^main_menu$"))
-    app.add_handler(CallbackQueryHandler(show_profile, pattern="^profile$"))
-    app.add_handler(CallbackQueryHandler(show_games_menu, pattern="^games_menu$"))
+    # Callback handlers
+    dispatcher.add_handler(CallbackQueryHandler(register_callback, pattern="^register$"))
+    dispatcher.add_handler(CallbackQueryHandler(show_main_menu, pattern="^main_menu$"))
+    dispatcher.add_handler(CallbackQueryHandler(show_profile, pattern="^profile$"))
+    dispatcher.add_handler(CallbackQueryHandler(show_games_menu, pattern="^games_menu$"))
     
-    app.add_handler(CallbackQueryHandler(football_game, pattern="^football_game$"))
-    app.add_handler(CallbackQueryHandler(process_football_bet, pattern="^football_(goal|miss)$"))
+    # Футбол
+    dispatcher.add_handler(CallbackQueryHandler(football_game, pattern="^football_game$"))
+    dispatcher.add_handler(CallbackQueryHandler(process_football_bet, pattern="^football_(goal|miss)$"))
     
-    app.add_handler(CallbackQueryHandler(dice_game, pattern="^dice_game$"))
-    app.add_handler(CallbackQueryHandler(process_dice_bet, pattern="^dice_(more|less|equal)$"))
+    # Кости
+    dispatcher.add_handler(CallbackQueryHandler(dice_game, pattern="^dice_game$"))
+    dispatcher.add_handler(CallbackQueryHandler(process_dice_bet, pattern="^dice_(more|less|equal)$"))
     
-    app.add_handler(CallbackQueryHandler(roulette_menu, pattern="^roulette_menu$"))
-    app.add_handler(CallbackQueryHandler(roulette_bet, pattern="^roulette_"))
+    # Рулетка
+    dispatcher.add_handler(CallbackQueryHandler(roulette_menu, pattern="^roulette_menu$"))
+    dispatcher.add_handler(CallbackQueryHandler(roulette_bet, pattern="^roulette_"))
     
-    app.add_handler(CallbackQueryHandler(crash_game, pattern="^crash_game$"))
+    # Краш
+    dispatcher.add_handler(CallbackQueryHandler(crash_game, pattern="^crash_game$"))
     
-    app.add_handler(CallbackQueryHandler(diamonds_game, pattern="^diamonds_game$"))
-    app.add_handler(CallbackQueryHandler(process_diamond_choice, pattern="^diamond_"))
-    app.add_handler(CallbackQueryHandler(process_diamond_choice, pattern="^diamond_cashout$"))
+    # Обработчики текстовых сообщений
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text_messages))
     
-    app.add_handler(CallbackQueryHandler(mines_game, pattern="^mines_game$"))
-    app.add_handler(CallbackQueryHandler(process_mine_choice, pattern="^mine_"))
-    app.add_handler(CallbackQueryHandler(process_mine_choice, pattern="^mine_cashout$"))
-    
-    app.add_handler(CallbackQueryHandler(blackjack_menu, pattern="^blackjack_menu$"))
-    app.add_handler(CallbackQueryHandler(process_blackjack_action, pattern="^blackjack_"))
-    
-    app.add_handler(CallbackQueryHandler(bank_menu, pattern="^bank_menu$"))
-    app.add_handler(CallbackQueryHandler(bank_deposit, pattern="^bank_deposit$"))
-    app.add_handler(CallbackQueryHandler(bank_withdraw, pattern="^bank_withdraw$"))
-    app.add_handler(CallbackQueryHandler(bank_transfer, pattern="^bank_transfer$"))
-    
-    app.add_handler(CallbackQueryHandler(jobs_menu, pattern="^jobs_menu$"))
-    app.add_handler(CallbackQueryHandler(select_job, pattern="^job_"))
-    
-    app.add_handler(CallbackQueryHandler(farm_menu, pattern="^farm_menu$"))
-    app.add_handler(CallbackQueryHandler(farm_collect, pattern="^farm_collect$"))
-    app.add_handler(CallbackQueryHandler(farm_buy_menu, pattern="^farm_buy$"))
-    app.add_handler(CallbackQueryHandler(buy_gpu, pattern="^buy_gpu_"))
-    
-    app.add_handler(CallbackQueryHandler(btc_market, pattern="^btc_market$"))
-    app.add_handler(CallbackQueryHandler(btc_buy, pattern="^btc_buy$"))
-    app.add_handler(CallbackQueryHandler(btc_sell, pattern="^btc_sell$"))
-    
-    app.add_handler(CallbackQueryHandler(admin_menu, pattern="^admin_menu$"))
-    app.add_handler(CallbackQueryHandler(admin_find_user, pattern="^admin_find_user$"))
-    app.add_handler(CallbackQueryHandler(admin_give_money, pattern="^admin_give_money$"))
-    app.add_handler(CallbackQueryHandler(admin_take_money, pattern="^admin_take_money$"))
-    app.add_handler(CallbackQueryHandler(admin_give_btc, pattern="^admin_give_btc$"))
-    app.add_handler(CallbackQueryHandler(admin_ban, pattern="^admin_ban$"))
-    app.add_handler(CallbackQueryHandler(admin_unban, pattern="^admin_unban$"))
-    app.add_handler(CallbackQueryHandler(admin_stats, pattern="^admin_stats$"))
-    
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-    
+    # Запуск бота
     logging.info("Бот запускается...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == '__main__':
     main()
-

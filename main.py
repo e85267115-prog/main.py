@@ -502,11 +502,13 @@ class Database:
                     is_active=row['is_active']
                 )
             return None
-    
     async def use_promo_code(self, code: str, user_id: int):
     """Минимальная рабочая версия"""
-    return True, "✅ Промокод активирован!", {"type": "money", "value": 1000}
-    
+    try:
+        return True, "✅ Промокод активирован!", {"type": "money", "value": 1000}
+    except:
+        return False, "❌ Ошибка", {}
+        
     async def get_user_promo_uses(self, user_id: int) -> List[PromoUse]:
         """Получение истории использования промокодов пользователем"""
         async with self.get_connection() as conn:

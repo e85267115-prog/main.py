@@ -574,6 +574,7 @@ async def get_user_promo_uses(self, user_id: int):
             )
             for row in rows
         ]
+        
 # ========== МЕТОДЫ ПРОМОКОДОВ В КЛАССЕ DATABASE ==========
 async def create_promo_code(self, promo: PromoCode) -> bool:
     """Создание промокода"""
@@ -730,18 +731,19 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ₿ Ваш BTC: *{user.btc:.4f}*
 
 💎 *Типы промокодов:*
-💰 Деньги - пополнение баланса
-₿ Bitcoin - пополнение BTC баланса  
-⭐ Опыт - добавление опыта
-🏆 Уровень - повышение уровня
+• 💰 Деньги - пополнение баланса
+• ₿ Bitcoin - пополнение BTC баланса  
+• ⭐ Опыт - добавление опыта
+• 🏆 Уровень - повышение уровня
 
 🔍 *Как использовать:*
 1. Получите промокод (раздачи, ивенты, администрация)
 2. Введите команду /promo [код]
 3. Или нажмите кнопку ниже и введите код
+4. Один промокод можно использовать один раз
 
 🎁 *Активные промоакции:*
-- При регистрации: 10,000
+- Стартовый бонус: 10,000
 - За каждого реферала: {format_number(REFERRAL_BONUS)}
 - Ежедневный бонус: до {format_number(LEVEL_BONUS.get(5, 150000))}
 """
@@ -779,8 +781,7 @@ async def activate_promo_callback(update: Update, context: ContextTypes.DEFAULT_
         "🎫 *АКТИВАЦИЯ ПРОМОКОДА*\n\n"
         "Введите промокод:\n"
         "Например: `SUMMER2024` или `WELCOME100`\n\n"
-        "Или используйте команду:\n"
-        "`/promo [КОД]`",
+        "Или нажмите /promo [код]",
         parse_mode=ParseMode.MARKDOWN
     )
     
@@ -885,8 +886,216 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
             result_text,
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
-        )
+                )
 
+    if len(promo_uses) > 10:
+        history_text += f"\n... и еще {len(promo_uses) - 10} промокодов"
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="promo_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        history_text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создание промокода (админ) - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ У вас нет прав администратора!", show_alert=True)
+        return
+    
+    keyboard = [
+        [InlineKeyboardButton("💰 Деньги", callback_data="create_promo_money"),
+         InlineKeyboardButton("₿ Bitcoin", callback_data="create_promo_btc")],
+        [InlineKeyboardButton("⭐ Опыт", callback_data="create_promo_exp"),
+         InlineKeyboardButton("🏆 Уровень", callback_data="create_promo_level")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="promo_menu")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        "🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+        "Выберите тип промокода:",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор типа промокода для создания"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ У вас нет прав администратора!", show_alert=True)
+        return
+    
+    promo_type = query.data.split("_")[2]  # create_promo_money -> money
+    
+    # Сохраняем тип промокода в контексте
+    context.user_data["create_promo_type"] = promo_type
+    
+    type_names = {
+        "money": "💰 Деньги",
+        "btc": "₿ Bitcoin",
+        "exp": "⭐ Опыт",
+        "level": "🏆 Уровень"
+    }
+    
+    await query.edit_message_text(
+        f"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+        f"Тип: {type_names.get(promo_type, promo_type)}\n\n"
+        f"Введите значение промокода:\n"
+        f"• Для денег: сумма (например: 10000)\n"
+        f"• Для BTC: количество (например: 0.01)\n"
+        f"• Для опыта: количество опыта (например: 10)\n"
+        f"• Для уровня: количество уровней (например: 1)",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    context.user_data["admin_action"] = "create_promo_value"
+
+async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка создания промокода"""
+    user_id = update.effective_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ У вас нет прав администратора!")
+        return
+    
+    action = context.user_data.get("admin_action")
+    
+    if action == "create_promo_value":
+        try:
+            # Получаем значение промокода
+            value_text = update.message.text.strip()
+            
+            # Преобразуем значение в нужный тип
+            promo_type = context.user_data.get("create_promo_type")
+            
+            if promo_type in ["money", "exp", "level"]:
+                value = int(value_text)
+            elif promo_type == "btc":
+                value = float(value_text)
+            else:
+                await update.message.reply_text("❌ Неизвестный тип промокода!")
+                return
+            
+            # Сохраняем значение
+            context.user_data["create_promo_value"] = value
+            
+            # Запрашиваем количество использований
+            await update.message.reply_text(
+                "🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+                "Введите максимальное количество использований (1-1000):",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            context.user_data["admin_action"] = "create_promo_max_uses"
+            
+        except ValueError:
+            await update.message.reply_text("❌ Введите корректное число!")
+    
+    elif action == "create_promo_max_uses":
+        try:
+            max_uses = int(update.message.text.strip())
+            if max_uses < 1 or max_uses > 1000:
+                await update.message.reply_text("❌ Введите число от 1 до 1000!")
+                return
+            
+            # Сохраняем количество использований
+            context.user_data["create_promo_max_uses"] = max_uses
+            
+            # Запрашиваем срок действия
+            keyboard = [
+                [InlineKeyboardButton("⏰ 1 час", callback_data="expire_1")],
+                [InlineKeyboardButton("⏰ 24 часа", callback_data="expire_24")],
+                [InlineKeyboardButton("⏰ 7 дней", callback_data="expire_168")],
+                [InlineKeyboardButton("⏰ 30 дней", callback_data="expire_720")],
+                [InlineKeyboardButton("♾️ Без срока", callback_data="expire_none")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+                "Выберите срок действия промокода:",
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        except ValueError:
+            await update.message.reply_text("❌ Введите корректное число!")
+
+async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Установка срока действия промокода"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    if user_id not in ADMIN_IDS:
+        await query.answer("❌ У вас нет прав администратора!", show_alert=True)
+        return
+    
+    expire_type = query.data.split("_")[1]  # expire_1, expire_24, etc
+    
+    if expire_type == "none":
+        expires_at = None
+    else:
+        hours = int(expire_type)
+        expires_at = datetime.datetime.now() + datetime.timedelta(hours=hours)
+    
+    # Сохраняем срок действия
+    context.user_data["create_promo_expires"] = expires_at
+    
+    # Генерируем промокод
+    promo_code = generate_promo_code()
+    
+    # Создаем объект промокода
+    promo = PromoCode(
+        code=promo_code,
+        promo_type=context.user_data["create_promo_type"],
+        value=context.user_data["create_promo_value"],
+        created_by=user_id,
+        created_at=datetime.datetime.now(),
+        expires_at=expires_at,
+        max_uses=context.user_data["create_promo_max_uses"],
+        current_uses=0,
+        is_active=True
+    )
+    
+    # Сохраняем промокод в БД
+    success = await db.create_promo_code(promo)
+    
+    if success:
+        # Формируем информацию о промокоде
+        type_names = {
+            "money": "💰 Деньги",
+            "btc": "₿ Bitcoin",
+            "exp": "⭐ Опыт",
+            "level": "🏆 Уровень"
+        }
+        
+        expires_text = "Без срока" if not expires_at else expires_at.strftime('%d.%m.%Y %H:%M')
+        
+        result_text = f"""
+✅ *ПРОМОКОД СОЗДАН!*
+
+🎫 Код: `{promo_code}`
+💎 Тип: {type_names.get(promo.promo_type, promo.promo_type)}
+💰 Значение: {promo.value}
+🔄 Использований: {promo.current_uses}/{promo.max_uses}
+⏰ Срок действия: {expires_text}
+📅 Создан: {promo.created_at.strftime('%d.%m.%Y %H:%M')}
 async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """История использованных промокодов"""
     query = update.callback_query
@@ -1162,8 +1371,41 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Ошибка при создании промокода!\n"
             "Попробуйте еще раз.",
             parse_mode=ParseMode.MARKDOWN
-        ) 
+        )
+
+# ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ==========
+
+async def handle_promo_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка текстовых сообщений для промокодов"""
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
     
+    # Обработка ввода промокода
+    if "awaiting_promo" in context.user_data:
+        await process_promo_code(update, context, text.upper())
+        context.user_data.pop("awaiting_promo", None)
+        return
+    
+    # Обработка создания промокода
+    elif "admin_action" in context.user_data:
+        action = context.user_data["admin_action"]
+        if action in ["create_promo_value", "create_promo_max_uses"]:
+            await process_create_promo(update, context)
+        return
+    
+    # Команда /promo
+    elif text.lower().startswith("/promo"):
+        parts = text.split()
+        if len(parts) >= 2:
+            promo_code = parts[1].upper()
+            await process_promo_code(update, context, promo_code)
+        else:
+            await update.message.reply_text(
+                "🎫 *Использование:* /promo [КОД]\n\n"
+                "Пример: `/promo WELCOME100`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
     # ========== МЕТОДЫ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
     async def add_referral(self, referrer_id: int, referral_id: int):
         """Добавление реферала"""
@@ -6603,6 +6845,13 @@ async def main():
     application.add_handler(CallbackQueryHandler(admin_unban, pattern="^admin_unban$"))
     application.add_handler(CallbackQueryHandler(admin_stats, pattern="^admin_stats$"))
     application.add_handler(CallbackQueryHandler(admin_update_btc, pattern="^admin_update_btc$"))
+
+    # Обработчики для создания промокодов (админ)
+    application.add_handler(CallbackQueryHandler(create_promo_type, pattern="^create_promo_"))
+    application.add_handler(CallbackQueryHandler(set_promo_expire, pattern="^expire_"))
+    
+    # Обработчик текстовых сообщений для промокодов
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_promo_messages))
     
     # Обработка текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))

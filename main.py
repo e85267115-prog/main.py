@@ -1122,7 +1122,47 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "money": "💰 Деньги",
             "btc": "₿ Bitcoin",
             "exp": "⭐ Опыт",
-            "level": 
+            "level": "🏆 Уровень"
+        }
+        
+        expires_text = "Без срока" if not expires_at else expires_at.strftime('%d.%m.%Y %H:%M')
+        
+        result_text = f"""
+✅ *ПРОМОКОД СОЗДАН!*
+
+🎫 Код: `{promo_code}`
+💎 Тип: {type_names.get(promo.promo_type, promo.promo_type)}
+💰 Значение: {promo.value}
+🔄 Использований: {promo.current_uses}/{promo.max_uses}
+⏰ Срок действия: {expires_text}
+📅 Создан: {promo.created_at.strftime('%d.%m.%Y %H:%M')}
+
+📋 *Использование:*
+• Пользователь: `/promo {promo_code}`
+• В меню: "Активировать промокод"
+"""
+        
+        # Очищаем данные контекста
+        context.user_data.pop("create_promo_type", None)
+        context.user_data.pop("create_promo_value", None)
+        context.user_data.pop("create_promo_max_uses", None)
+        context.user_data.pop("create_promo_expires", None)
+        context.user_data.pop("admin_action", None)
+        
+        keyboard = [[InlineKeyboardButton("🔙 В админ-панель", callback_data="admin_menu")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            result_text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    else:
+        await query.edit_message_text(
+            "❌ Ошибка при создании промокода!\n"
+            "Попробуйте еще раз.",
+            parse_mode=ParseMode.MARKDOWN
+        ) 
     
     # ========== МЕТОДЫ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
     async def add_referral(self, referrer_id: int, referral_id: int):

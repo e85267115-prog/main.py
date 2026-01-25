@@ -41,7 +41,7 @@ elif DATABASE_URL:
 else:
     print("⚠️ DATABASE_URL не задан, будет использовано локальное хранилище")
 "# Можно использовать SQLite для разработки"
-    DATABASE_URL = None
+DATABASE_URL = None
 
 # ========== НАСТРОЙКИ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
 REFERRAL_BONUS = 10000  # Бонус за приглашенного пользователя

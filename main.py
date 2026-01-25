@@ -503,47 +503,43 @@ class Database:
                 )
             return None
     
-    async def use_promo_code(self, code: str, user_id: int) -> Tuple[bool, str, Dict[str, Any]]:
-        """Использование промокода"""
-        async with self.get_connection() as conn:
-            # Проверяем, использовал ли уже пользователь этот промокод
-            used = await conn.fetchrow(
-                'SELECT id FROM promo_uses WHERE promo_code = $1 AND user_id = $2',
-                code, user_id
-            )
-            if used:
-                return False, "❌ Вы уже использовали этот промокод!", {}
-            
-            promo = await self.get_promo_code(code)
+    async def use_promo_code(self, code: str, user_id: int):
+    """Использование промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    async with self.get_connection() as conn:
+        used = await conn.fetchrow(
+            'SELECT id FROM promo_uses WHERE promo_code = $1 AND user_id = $2',
+            code, user_id
+        )
+        if used:
+            return False, "❌ Вы уже использовали этот промокод!", {}
+        
+        promo = await self.get_promo_code(code)
         if not promo:
-                return False, "❌ Промокод не найден!", {}
-            
-            if not promo.is_active:
-                return False, "❌ Промокод неактивен!", {}
-            
-            if promo.expires_at and promo.expires_at < datetime.datetime.now():
-                return False, "❌ Срок действия промокода истек!", {}
-            
-            if promo.current_uses >= promo.max_uses:
-                return False, "❌ Лимит использований промокода исчерпан!", {}
-            
-            # Обновляем счетчик использований
-            await conn.execute(
-                'UPDATE promo_codes SET current_uses = current_uses + 1 WHERE code = $1',
-                code
-            )
-            
-            # Записываем использование
-            await conn.execute(
-                'INSERT INTO promo_uses (promo_code, user_id, used_at) VALUES ($1, $2, $3)',
-                code, user_id, datetime.datetime.now()
-            )
-            
-            # Возвращаем данные для начисления бонуса
-            return True, "✅ Промокод успешно активирован!", {
-                "type": promo.promo_type,
-                "value": promo.value
-            }
+            return False, "❌ Промокод не найден!", {}
+        
+        if not promo.is_active:
+            return False, "❌ Промокод неактивен!", {}
+        
+        if promo.expires_at and promo.expires_at < datetime.datetime.now():
+            return False, "❌ Срок действия промокода истек!", {}
+        
+        if promo.current_uses >= promo.max_uses:
+            return False, "❌ Лимит использований промокода исчерпан!", {}
+        
+        await conn.execute(
+            'UPDATE promo_codes SET current_uses = current_uses + 1 WHERE code = $1',
+            code
+        )
+        
+        await conn.execute(
+            'INSERT INTO promo_uses (promo_code, user_id, used_at) VALUES ($1, $2, $3)',
+            code, user_id, datetime.datetime.now()
+        )
+        
+        return True, "✅ Промокод успешно активирован!", {
+            "type": promo.promo_type,
+            "value": promo.value
+        }
     
     async def get_user_promo_uses(self, user_id: int) -> List[PromoUse]:
         """Получение истории использования промокодов пользователем"""

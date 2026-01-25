@@ -3125,8 +3125,6 @@ class GoogleDriveDB:
 #     
 #     # Запуск бота
 #     logging.info("Бот запускается...")
-#     application.run_polling(allowed_updates=Update.ALL_TYPES)
-# 
-# if __name__ == '__main__':
-#     main()
-# ```
+if __name__ == "__main__":
+    application.run_polling()
+

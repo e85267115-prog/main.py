@@ -3033,98 +3033,55 @@ class GoogleDriveDB:
 #             )
 # 
 # # ========== ОСНОВНАЯ ФУНКЦИЯ ==========
-# def main():
-#     """Главная функция запуска бота"""
-#     # Настройка логирования
-#     logging.basicConfig(
-#         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-#         level=logging.INFO
-#     )
-#     
-#     # Загружаем данные
-#     load_data()
-#     
-#     # Создаем приложение
-#     application = Application.builder().token(TOKEN).build()
-#     
-#     # Команды
-#     application.add_handler(CommandHandler("start", start))
-#     application.add_handler(CommandHandler("menu", show_main_menu))
-#     application.add_handler(CommandHandler("bonus", bonus_command))
-#     application.add_handler(CommandHandler("work", work_command))
-#     application.add_handler(CommandHandler("profile", show_profile))
-#     
-#     # Callback handlers для игр
-#     application.add_handler(CallbackQueryHandler(register_callback, pattern="^register$"))
-#     application.add_handler(CallbackQueryHandler(show_main_menu, pattern="^main_menu$"))
-#     application.add_handler(CallbackQueryHandler(show_profile, pattern="^profile$"))
-#     application.add_handler(CallbackQueryHandler(show_games_menu, pattern="^games_menu$"))
-#     
-#     # Футбол
-#     application.add_handler(CallbackQueryHandler(football_game, pattern="^football_game$"))
-#     application.add_handler(CallbackQueryHandler(process_football_bet, pattern="^football_(goal|miss)$"))
-#     
-#     # Кости
-#     application.add_handler(CallbackQueryHandler(dice_game, pattern="^dice_game$"))
-#     application.add_handler(CallbackQueryHandler(process_dice_bet, pattern="^dice_(more|less|equal)$"))
-#     
-#     # Рулетка
-#     application.add_handler(CallbackQueryHandler(roulette_menu, pattern="^roulette_menu$"))
-#     application.add_handler(CallbackQueryHandler(roulette_bet, pattern="^roulette_"))
-#     
-#     # Краш
-#     application.add_handler(CallbackQueryHandler(crash_game, pattern="^crash_game$"))
-#     
-#     # Алмазы
-#     application.add_handler(CallbackQueryHandler(diamonds_game, pattern="^diamonds_game$"))
-#     application.add_handler(CallbackQueryHandler(process_diamond_choice, pattern="^diamond_"))
-#     application.add_handler(CallbackQueryHandler(process_diamond_choice, pattern="^diamond_cashout$"))
-#     
-#     # Мины
-#     application.add_handler(CallbackQueryHandler(mines_game, pattern="^mines_game$"))
-#     application.add_handler(CallbackQueryHandler(process_mine_choice, pattern="^mine_"))
-#     application.add_handler(CallbackQueryHandler(process_mine_choice, pattern="^mine_cashout$"))
-#     
-#     # Очко
-#     application.add_handler(CallbackQueryHandler(blackjack_menu, pattern="^blackjack_menu$"))
-#     application.add_handler(CallbackQueryHandler(process_blackjack_action, pattern="^blackjack_"))
-#     
-#     # Банк
-#     application.add_handler(CallbackQueryHandler(bank_menu, pattern="^bank_menu$"))
-#     application.add_handler(CallbackQueryHandler(bank_deposit, pattern="^bank_deposit$"))
-#     application.add_handler(CallbackQueryHandler(bank_withdraw, pattern="^bank_withdraw$"))
-#     application.add_handler(CallbackQueryHandler(bank_transfer, pattern="^bank_transfer$"))
-#     
-#     # Работа
-#     application.add_handler(CallbackQueryHandler(jobs_menu, pattern="^jobs_menu$"))
-#     application.add_handler(CallbackQueryHandler(select_job, pattern="^job_"))
-#     
-#     # Ферма BTC
-#     application.add_handler(CallbackQueryHandler(farm_menu, pattern="^farm_menu$"))
-#     application.add_handler(CallbackQueryHandler(farm_collect, pattern="^farm_collect$"))
-#     application.add_handler(CallbackQueryHandler(farm_buy_menu, pattern="^farm_buy$"))
-#     application.add_handler(CallbackQueryHandler(buy_gpu, pattern="^buy_gpu_"))
-#     
-#     # Биржа BTC
-#     application.add_handler(CallbackQueryHandler(btc_market, pattern="^btc_market$"))
-#     application.add_handler(CallbackQueryHandler(btc_buy, pattern="^btc_buy$"))
-#     application.add_handler(CallbackQueryHandler(btc_sell, pattern="^btc_sell$"))
-#     
-#     # Админ панель
-#     application.add_handler(CallbackQueryHandler(admin_menu, pattern="^admin_menu$"))
-#     application.add_handler(CallbackQueryHandler(admin_find_user, pattern="^admin_find_user$"))
-#     application.add_handler(CallbackQueryHandler(admin_give_money, pattern="^admin_give_money$"))
-#     application.add_handler(CallbackQueryHandler(admin_take_money, pattern="^admin_take_money$"))
-#     application.add_handler(CallbackQueryHandler(admin_give_btc, pattern="^admin_give_btc$"))
-#     application.add_handler(CallbackQueryHandler(admin_ban, pattern="^admin_ban$"))
-#     application.add_handler(CallbackQueryHandler(admin_unban, pattern="^admin_unban$"))
-#     application.add_handler(CallbackQueryHandler(admin_stats, pattern="^admin_stats$"))
-#     
-#     # Обработчики текстовых сообщений
-#     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
-#     
-#     # Запуск бота
-#     logging.info("Бот запускается...")
-if __name__ == "__main__":
-    application.run_polling()
+def main():
+    """Главная функция запуска бота"""
+    # Настройка логирования
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    
+    # Загружаем данные
+    load_data()
+    
+    # Создаем приложение с именем app
+    app = Application.builder().token(TOKEN).build()
+    
+    # Команды
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", show_main_menu))
+    app.add_handler(CommandHandler("bonus", bonus_command))
+    app.add_handler(CommandHandler("work", work_command))
+    app.add_handler(CommandHandler("profile", show_profile))
+    
+    # Callback handlers для игр
+    app.add_handler(CallbackQueryHandler(register_callback, pattern="^register$"))
+    app.add_handler(CallbackQueryHandler(show_main_menu, pattern="^main_menu$"))
+    app.add_handler(CallbackQueryHandler(show_profile, pattern="^profile$"))
+    app.add_handler(CallbackQueryHandler(show_games_menu, pattern="^games_menu$"))
+    
+    # Футбол
+    app.add_handler(CallbackQueryHandler(football_game, pattern="^football_game$"))
+    app.add_handler(CallbackQueryHandler(process_football_bet, pattern="^football_(goal|miss)$"))
+    
+    # Кости
+    app.add_handler(CallbackQueryHandler(dice_game, pattern="^dice_game$"))
+    app.add_handler(CallbackQueryHandler(process_dice_bet, pattern="^dice_(more|less|equal)$"))
+    
+    # Рулетка
+    app.add_handler(CallbackQueryHandler(roulette_menu, pattern="^roulette_menu$"))
+    app.add_handler(CallbackQueryHandler(roulette_bet, pattern="^roulette_"))
+    
+    # Краш
+    app.add_handler(CallbackQueryHandler(crash_game, pattern="^crash_game$"))
+    
+    # Обработчики текстовых сообщений
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
+    
+    # Запуск бота
+    logging.info("Бот запускается...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)  # Исправлено: app.run_polling вместо application.run_polling
+
+if __name__ == '__main__':
+    main()
 

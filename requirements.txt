@@ -1,5 +1,42 @@
-python-telegram-bot==13.5
-google-auth-httplib2==0.1.1
-google-auth-oauthlib==1.1.0
-google-api-python-client==2.108.0
-pytz==2023.3
+# ========== ОСНОВНЫЕ ЗАВИСИМОСТИ ==========
+
+# Telegram Bot
+python-telegram-bot==21.7  # Стабильная версия на 2024-2026
+telegram==0.0.1  # Обертка для типов
+
+# База данных (Supabase/PostgreSQL)
+asyncpg==0.29.0  # Асинхронный PostgreSQL драйвер
+psycopg2-binary==2.9.9  # Резервный синхронный драйвер
+
+# Время и даты
+pytz==2024.1  # Часовые пояса
+python-dateutil==2.8.2  # Утилиты для работы с датами
+
+# Конфигурация и переменные окружения
+python-dotenv==1.0.0  # Загрузка .env файлов
+
+# HTTP клиент (для будущих API)
+aiohttp==3.9.0  # Асинхронный HTTP клиент
+requests==2.31.0  # Синхронный HTTP клиент
+
+# Безопасность
+cryptography==42.0.0  # Шифрование
+PyJWT==2.8.0  # JWT токены (для Supabase Auth если нужно)
+
+# Утилиты
+colorlog==6.8.0  # Цветные логи
+tenacity==8.2.3  # Повторные попытки (retry)
+pydantic==2.5.0  # Валидация данных
+ujson==5.8.0  # Быстрый JSON (в 2-3 раза быстрее)
+
+# ========== ДЛЯ РАЗРАБОТКИ (dev) ==========
+# pip install -r requirements.txt
+
+# ========== ДЛЯ ПРОДАКШЕНА (prod) ==========
+# pip install --no-deps -r requirements.txt
+
+# ========== АЛЬТЕРНАТИВНЫЙ МИНИМАЛЬНЫЙ СЕТ ==========
+# python-telegram-bot==21.7
+# asyncpg==0.29.0
+# pytz==2024.1
+# python-dotenv==1.0.0

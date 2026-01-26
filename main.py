@@ -1692,16 +1692,18 @@ text = (
     f"{level_up_text}"
 )
 
-keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
-             InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
-reply_markup = InlineKeyboardMarkup(keyboard)
+keyboard = [
+        [InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
+         InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+
 # Краш
 async def game_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Игра Краш"""
-    query = update.callback_query
-    await query.answer()
     
     await query.edit_message_text(
         text="💥 *КРАШ*\n\n"

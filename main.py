@@ -2,7 +2,6 @@
 import logging
 import json
 import random
-import asyncio
 import datetime
 import os
 import secrets

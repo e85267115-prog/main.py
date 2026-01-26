@@ -3903,6 +3903,22 @@ async def main():
     # ---------------- Текстовые сообщения ----------------
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
 
-    print("✅ Все хэндлеры добавлены. Стартуем polling...")
+    async def main():
+    print("🤖 Начало main()")
+    
+    # Пропускаем базу если проблема в ней
+    # if db: 
+    #     await db.connect()
+    
+    app = Application.builder().token(TOKEN).build()
+    
+    # ТОЛЬКО ОДИН ПРОСТОЙ ХЭНДЛЕР ДЛЯ ТЕСТА
+    async def test_start(update, context):
+        await update.message.reply_text("Бот работает!")
+    
+    app.add_handler(CommandHandler("start", test_start))
+    print("✅ Хэндлер добавлен")
+    
+    print("🚀 ЗАПУСКАЮ POLLING...")
     await app.run_polling()
-    print("✅ Бот остановлен")
+    print("❌ Этого не должно быть видно")

@@ -3927,5 +3927,5 @@ if __name__ == "__main__":
 
     app.run_polling(
         allowed_updates=Update.ALL_TYPES,
-        close_loop=False  # 🔥 КРИТИЧНО для Railway
+        close_loop=False  # 🔥 критично для Railway
     )

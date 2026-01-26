@@ -2113,7 +2113,7 @@ async def handle_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-                    text = (
+            text = (
                 f"{get_emoji('check')} *ПЕРЕВОД ВЫПОЛНЕН!*\n\n"
                 f"👤 Получатель: {receiver_id}\n"
                 f"{get_emoji('money')} Сумма: {format_number(amount)}\n"

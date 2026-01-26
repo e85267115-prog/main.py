@@ -264,41 +264,55 @@ class BTCFarm:
     quantity: int = 0
     last_collected: Optional[datetime.datetime] = None
 
-# ========== БАЗА ДАННЫХ ==========
+# ========== БАЗА ДАННЫХ С PSYCOPG2 ==========
 class Database:
     def __init__(self, connection_string: str):
         self.connection_string = connection_string
-        self.pool: Optional[asyncpg.Pool] = None
+        self.pool = None
         self.is_supabase = connection_string and "supabase" in connection_string.lower()
     
     async def connect(self):
         """Подключение к БД"""
         if not self.connection_string:
-            raise Exception("DATABASE_URL не задан!")
+            print("⚠️ DATABASE_URL не задан, используется локальное хранилище")
+            return
         
-        ssl_context = None
-        if self.is_supabase:
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-        
-        self.pool = await asyncpg.create_pool(
-            dsn=self.connection_string,
-            min_size=1,
-            max_size=5,
-            ssl=ssl_context if self.is_supabase else None
-        )
-        await self.init_db()
-        print(f"✅ База данных подключена (Supabase: {self.is_supabase})")
+        try:
+            # Создаем пул соединений psycopg2
+            self.pool = pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=5,
+                dsn=self.connection_string,
+                sslmode='require' if self.is_supabase else 'prefer'
+            )
+            
+            # Проверяем подключение
+            test_conn = self.pool.getconn()
+            test_conn.close()
+            self.pool.putconn(test_conn)
+            
+            await self.init_db()
+            print(f"✅ База данных подключена (Supabase: {self.is_supabase})")
+            
+        except Exception as e:
+            print(f"❌ Ошибка подключения к БД: {e}")
+            print("⚠️ Бот будет работать в режиме без сохранения данных")
+            self.pool = None
     
     async def init_db(self):
         """Инициализация таблиц"""
-        async with self.pool.acquire() as conn:
-            # Пользователи
-            await conn.execute('''
+        if not self.pool:
+            return
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            
+            # Таблица пользователей (со всеми полями из dataclass User)
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id BIGINT PRIMARY KEY,
-                    username TEXT,
+                    username TEXT DEFAULT '',
                     balance BIGINT DEFAULT 10000,
                     bank BIGINT DEFAULT 0,
                     btc DOUBLE PRECISION DEFAULT 0.0,
@@ -312,15 +326,15 @@ class Database:
                     registered TIMESTAMPTZ DEFAULT NOW(),
                     last_daily_bonus TIMESTAMPTZ,
                     is_banned BOOLEAN DEFAULT FALSE,
-                    referral_code TEXT UNIQUE,
+                    referral_code TEXT DEFAULT '',
                     referred_by BIGINT,
                     total_referrals INTEGER DEFAULT 0,
                     referral_earnings BIGINT DEFAULT 0
                 )
             ''')
             
-            # Ферма BTC
-            await conn.execute('''
+            # Таблица фермы BTC (со всеми полями из dataclass BTCFarm)
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS btc_farm (
                     user_id BIGINT,
                     gpu_type TEXT,
@@ -330,8 +344,8 @@ class Database:
                 )
             ''')
             
-            # Транзакции
-            await conn.execute('''
+            # Таблица транзакций
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS transactions (
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT,
@@ -341,18 +355,117 @@ class Database:
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )
             ''')
+            
+            # Таблица промокодов (если используется)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS promo_codes (
+                    code TEXT PRIMARY KEY,
+                    promo_type TEXT NOT NULL,
+                    value DOUBLE PRECISION NOT NULL,
+                    created_by BIGINT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    expires_at TIMESTAMPTZ,
+                    max_uses INTEGER DEFAULT 1,
+                    current_uses INTEGER DEFAULT 0,
+                    is_active BOOLEAN DEFAULT TRUE
+                )
+            ''')
+            
+            # Таблица использования промокодов
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS promo_uses (
+                    id BIGSERIAL PRIMARY KEY,
+                    promo_code TEXT,
+                    user_id BIGINT,
+                    used_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ''')
+            
+            conn.commit()
+            
+            # Создаем индексы для производительности
+            indexes = [
+                'CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)',
+                'CREATE INDEX IF NOT EXISTS idx_users_banned ON users(is_banned)',
+                'CREATE INDEX IF NOT EXISTS idx_users_ref_code ON users(referral_code)',
+                'CREATE INDEX IF NOT EXISTS idx_promo_expires ON promo_codes(expires_at)',
+                'CREATE INDEX IF NOT EXISTS idx_promo_active ON promo_codes(is_active)'
+            ]
+            
+            for index_sql in indexes:
+                try:
+                    cursor.execute(index_sql)
+                    conn.commit()
+                except Exception as e:
+                    print(f"⚠️ Ошибка создания индекса: {e}")
+                    
+        except Exception as e:
+            print(f"❌ Ошибка инициализации БД: {e}")
+        finally:
+            self.pool.putconn(conn)
     
     async def get_user(self, user_id: int) -> Optional[User]:
-        """Получить пользователя"""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow('SELECT * FROM users WHERE user_id = $1', user_id)
-            return User.from_dict(dict(row)) if row else None
+        """Получить пользователя из БД"""
+        if not self.pool:
+            return None
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor(cursor_factory=extras.DictCursor)
+            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                # Преобразуем в словарь и создаем User dataclass
+                user_dict = dict(row)
+                return User.from_dict(user_dict)
+            return None
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения пользователя {user_id}: {e}")
+            return None
+        finally:
+            self.pool.putconn(conn)
     
     async def save_user(self, user: User):
-        """Сохранить пользователя"""
-        async with self.pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        """Сохранение пользователя в БД"""
+        if not self.pool:
+            return
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            
+            # Преобразуем dataclass в кортеж значений
+            user_dict = user.to_dict()
+            values = (
+                user_dict["user_id"],
+                user_dict["username"],
+                user_dict["balance"],
+                user_dict["bank"],
+                user_dict["btc"],
+                user_dict["level"],
+                user_dict["exp"],
+                user_dict["wins"],
+                user_dict["loses"],
+                user_dict["job"],
+                user_dict["last_work"],
+                user_dict["last_bonus"],
+                user_dict["registered"],
+                user_dict["last_daily_bonus"],
+                user_dict["is_banned"],
+                user_dict["referral_code"],
+                user_dict["referred_by"],
+                user_dict["total_referrals"],
+                user_dict["referral_earnings"]
+            )
+            
+            cursor.execute('''
+                INSERT INTO users (
+                    user_id, username, balance, bank, btc, level, exp, wins, loses,
+                    job, last_work, last_bonus, registered, last_daily_bonus, is_banned,
+                    referral_code, referred_by, total_referrals, referral_earnings
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id) DO UPDATE SET
                     username = EXCLUDED.username,
                     balance = EXCLUDED.balance,
@@ -371,38 +484,136 @@ class Database:
                     referred_by = EXCLUDED.referred_by,
                     total_referrals = EXCLUDED.total_referrals,
                     referral_earnings = EXCLUDED.referral_earnings
-            ''', *list(user.to_dict().values()))
+            ''', values)
+            
+            conn.commit()
+            
+        except Exception as e:
+            print(f"❌ Ошибка сохранения пользователя {user.user_id}: {e}")
+            conn.rollback()
+        finally:
+            self.pool.putconn(conn)
     
     async def get_user_farm(self, user_id: int) -> List[BTCFarm]:
-        """Получить ферму пользователя"""
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch('SELECT * FROM btc_farm WHERE user_id = $1', user_id)
-            return [
-                BTCFarm(
-                    user_id=row['user_id'],
-                    gpu_type=row['gpu_type'],
-                    quantity=row['quantity'],
-                    last_collected=row['last_collected']
-                ) for row in rows
-            ]
+        """Получение фермы пользователя"""
+        if not self.pool:
+            return []
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor(cursor_factory=extras.DictCursor)
+            cursor.execute('SELECT * FROM btc_farm WHERE user_id = %s', (user_id,))
+            rows = cursor.fetchall()
+            
+            # Создаем список объектов BTCFarm dataclass
+            farms = []
+            for row in rows:
+                farm_dict = dict(row)
+                farms.append(BTCFarm(
+                    user_id=farm_dict["user_id"],
+                    gpu_type=farm_dict["gpu_type"],
+                    quantity=farm_dict["quantity"],
+                    last_collected=farm_dict["last_collected"]
+                ))
+            
+            return farms
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения фермы пользователя {user_id}: {e}")
+            return []
+        finally:
+            self.pool.putconn(conn)
     
     async def update_farm(self, farm: BTCFarm):
-        """Обновить ферму"""
-        async with self.pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO btc_farm VALUES ($1, $2, $3, $4)
+        """Обновление фермы"""
+        if not self.pool:
+            return
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO btc_farm (user_id, gpu_type, quantity, last_collected)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (user_id, gpu_type) DO UPDATE SET
                     quantity = EXCLUDED.quantity,
                     last_collected = EXCLUDED.last_collected
-            ''', farm.user_id, farm.gpu_type, farm.quantity, farm.last_collected)
+            ''', (farm.user_id, farm.gpu_type, farm.quantity, farm.last_collected))
+            
+            conn.commit()
+            
+        except Exception as e:
+            print(f"❌ Ошибка обновления фермы: {e}")
+            conn.rollback()
+        finally:
+            self.pool.putconn(conn)
     
     async def add_transaction(self, user_id: int, amount: int, type_: str, description: str):
-        """Добавить транзакцию"""
-        async with self.pool.acquire() as conn:
-            await conn.execute('''
+        """Добавление транзакции"""
+        if not self.pool:
+            return
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
                 INSERT INTO transactions (user_id, amount, type, description)
-                VALUES ($1, $2, $3, $4)
-            ''', user_id, amount, type_, description)
+                VALUES (%s, %s, %s, %s)
+            ''', (user_id, amount, type_, description))
+            
+            conn.commit()
+            
+        except Exception as e:
+            print(f"❌ Ошибка добавления транзакции: {e}")
+            conn.rollback()
+        finally:
+            self.pool.putconn(conn)
+    
+    async def get_user_by_ref_code(self, ref_code: str) -> Optional[User]:
+        """Получение пользователя по реферальному коду"""
+        if not self.pool:
+            return None
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor(cursor_factory=extras.DictCursor)
+            cursor.execute('SELECT * FROM users WHERE referral_code = %s', (ref_code,))
+            row = cursor.fetchone()
+            
+            if row:
+                return User.from_dict(dict(row))
+            return None
+            
+        except Exception as e:
+            print(f"❌ Ошибка поиска пользователя по коду {ref_code}: {e}")
+            return None
+        finally:
+            self.pool.putconn(conn)
+    
+    async def create_promo_code(self, promo_code: str, promo_type: str, value: float, 
+                               created_by: int, expires_at: datetime = None, 
+                               max_uses: int = 1) -> bool:
+        """Создание промокода"""
+        if not self.pool:
+            return False
+        
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO promo_codes (code, promo_type, value, created_by, expires_at, max_uses)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (promo_code, promo_type, value, created_by, expires_at, max_uses))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка создания промокода {promo_code}: {e}")
+            conn.rollback()
+            return False
+        finally:
+            self.pool.putconn(conn)
 
 # ========== ИНИЦИАЛИЗАЦИЯ ==========
 db = Database(DATABASE_URL) if DATABASE_URL else None

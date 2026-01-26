@@ -157,7 +157,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class User:
     user_id: int
-    username: str = "
+    username: str = ""
     balance: int = 10000
     bank: int = 0
     btc: float = 0.0
@@ -171,7 +171,7 @@ class User:
     registered: datetime.datetime = field(default_factory=datetime.datetime.now)
     last_daily_bonus: Optional[datetime.datetime] = None
     is_banned: bool = False
-    referral_code: str = "
+    referral_code: str = ""
     referred_by: Optional[int] = None
     total_referrals: int = 0
     referral_earnings: int = 0

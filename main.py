@@ -3856,27 +3856,28 @@ async def daily_interest_task(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"❌ Ошибка при начислении процентов: {e}")
 
-# ========== ОСНОВНАЯ ФУНКЦИЯ ==========
+import datetime
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+)
+
+# ==================== Основная функция ====================
 async def main():
     """Основная функция запуска бота"""
-    # Проверяем наличие токена
+
     if TOKEN == "ВАШ_ТОКЕН_БОТА":
-        print("❌ Установите токен бота в переменной окружения TOKEN")
+        print("❌ Установите токен бота в переменной TOKEN")
         return
-    
-    # Подключаемся к базе данных
-    if db:
-        try:
-            await db.connect()
-            print("✅ База данных подключена")
-        except Exception as e:
-            print(f"❌ Ошибка подключения к БД: {e}")
-            print("⚠️ Бот будет работать в режиме без сохранения данных")
-    
+
     # Создаем приложение
     app = Application.builder().token(TOKEN).build()
-    
-    # Добавляем обработчики команд
+
+    # ---------------- Командные обработчики ----------------
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("profile", profile_command))
@@ -3892,14 +3893,16 @@ async def main():
     app.add_handler(CommandHandler("referral", referral))
     app.add_handler(CommandHandler("shop", shop))
     app.add_handler(CommandHandler("admin", admin_panel))
-    
-    # Добавляем обработчики callback-запросов
+
+    # ---------------- Callback-запросы ----------------
     app.add_handler(CallbackQueryHandler(callback_handler))
-    
-    # Добавляем обработчик текстовых сообщений
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-    
-    # Настраиваем задачу для ежедневных процентов
+
+    # ---------------- Текстовые сообщения ----------------
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
+    )
+
+    # ---------------- Ежедневные задачи ----------------
     job_queue = app.job_queue
     if job_queue:
         # Начисляем проценты каждый день в 21:00 UTC (00:00 МСК)
@@ -3909,37 +3912,11 @@ async def main():
             days=(0, 1, 2, 3, 4, 5, 6)
         )
         print("✅ Задача ежедневных процентов настроена")
-    
-    import logging
-from telegram import Update
 
-# ==================== Основной запуск ====================
-async def main():
+    # ---------------- Запуск бота ----------------
     print("🤖 Бот запускается...")
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"📢 Канал: {CHANNEL_USERNAME}")
     print(f"💬 Чат: {CHAT_USERNAME}")
 
-    # Здесь добавляем polling
-    await dp.start_polling(allowed_updates=Update.ALL_TYPES)
-
-
-# ========== Запуск ==========
-def start_bot():
-    """Запуск Telegram бота"""
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO
-    )
-
-    try:
-        asyncio.run(main())  # main() внутри себя делает await dp.start_polling()
-    except KeyboardInterrupt:
-        print("\n👋 Бот остановлен")
-    except Exception as e:
-        print(f"❌ Критическая ошибка: {e}")
-
-
-if __name__ == "__main__":
-    print("🤖 Запуск Telegram бота...")
-    start_bot()
+    await app.run_polling(allowed_updates=None)  # Бот отвечает на все сообщения

@@ -3916,9 +3916,10 @@ from telegram import Update
 # ================== ЗАПУСК БОТА ==================
 from telegram.ext import Application
 
-app = Application.builder().token("123:TEST").build()
+app = Application.builder().token(TOKEN).build()
 
 if __name__ == "__main__":
     print("OK")
     app.run_polling()
+
 

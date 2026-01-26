@@ -1679,24 +1679,24 @@ async def mines_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{level_up_text}"
     )
     
-    keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
-    text = (
-        f"💣 *МИНЫ - РЕЗУЛЬТАТ*\n\n"
-        f"✅ Открыто ячеек: {len(context.user_data.get('mines_opened', []))}\n"
-        f"🎯 Множитель: {multiplier}x\n"
-        f"🎉 Вы успешно забрали выигрыш!\n\n"
-        f"{get_emoji('money')} Ставка: {format_number(bet)}\n"
-        f"💰 Выигрыш: {format_number(win_amount)}\n"
-        f"💣 Баланс: {format_number(user_data.balance)}"
-        f"{level_up_text}"
-    )
+    keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines")]]
     
-    keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
-                 InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+text = (
+    f"💣 *МИНЫ - РЕЗУЛЬТАТ*\n\n"
+    f"✅ Открыто ячеек: {len(context.user_data.get('mines_opened', []))}\n"
+    f"🎯 Множитель: {multiplier}x\n"
+    f"🎉 Вы успешно забрали выигрыш!\n\n"
+    f"{get_emoji('money')} Ставка: {format_number(bet)}\n"
+    f"💰 Выигрыш: {format_number(win_amount)}\n"
+    f"💣 Баланс: {format_number(user_data.balance)}"
+    f"{level_up_text}"
+)
 
+keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
+             InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
+reply_markup = InlineKeyboardMarkup(keyboard)
+
+await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 # Краш
 async def game_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Игра Краш"""

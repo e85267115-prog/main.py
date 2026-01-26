@@ -3914,18 +3914,11 @@ async def main():
 from telegram import Update
 
 # ================== ЗАПУСК БОТА ==================
+from telegram.ext import Application
+
+app = Application.builder().token("123:TEST").build()
+
 if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-    )
+    print("OK")
+    app.run_polling()
 
-    print("🤖 Бот запускается...")
-    print(f"👑 Админы: {ADMIN_IDS}")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print(f"💬 Чат: {CHAT_USERNAME}")
-
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        close_loop=False  # 🔥 критично для Railway
-    )

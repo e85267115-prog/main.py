@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 import aiohttp
 
 # ========== КОНФИГУРАЦИЯ ==========
-TOKEN = os.environ.get("TOKEN", "ВАШ_ТОКЕН_БОТА")
+TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_IDS = json.loads(os.environ.get("ADMIN_IDS", "[123456789]"))
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@nvibee_bet")
 CHAT_USERNAME = os.environ.get("CHAT_USERNAME", "@chatvibee_bet")

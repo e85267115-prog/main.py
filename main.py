@@ -213,7 +213,7 @@ class User:
             loses=data.get("loses", 0),
             job=data.get("job"),
             is_banned=data.get("is_banned", False),
-            referral_code=data.get("referral_code", "),
+            referral_code=data.get("referral_code", ""),
             referred_by=data.get("referred_by"),
             total_referrals=data.get("total_referrals", 0),
             referral_earnings=data.get("referral_earnings", 0)

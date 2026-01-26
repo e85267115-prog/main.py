@@ -36,7 +36,7 @@ CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@nvibee_bet")
 CHAT_USERNAME = os.environ.get("CHAT_USERNAME", "@chatvibee_bet")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 PORT = int(os.environ.get("PORT", 8000))
-
+print("DEBUG TOKEN =", repr(TOKEN))
 # ========== FLASK ДЛЯ KEEP-ALIVE ==========
 flask_app = Flask(__name__)
 

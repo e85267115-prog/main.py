@@ -426,8 +426,7 @@ class Database:
         print(f"❌ Ошибка инициализации БД: {e}")
     finally:
         self.pool.putconn(conn)
-
-async def get_user(self, user_id: int) -> Optional[User]:
+    async def get_user(self, user_id: int) -> Optional[User]:
     """Получить пользователя из БД"""
     if not self.pool:
         return None

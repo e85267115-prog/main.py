@@ -203,7 +203,7 @@ class User:
     def from_dict(cls, data: Dict[str, Any]) -> 'User':
         user = cls(
             user_id=data["user_id"],
-            username=data.get("username", "),
+            username=data.get("username", ""),
             balance=data.get("balance", 10000),
             bank=data.get("bank", 0),
             btc=data.get("btc", 0.0),

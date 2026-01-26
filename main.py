@@ -3913,13 +3913,36 @@ async def main():
     import logging
 from telegram import Update
 
-# ================== ЗАПУСК БОТА ==================
-from telegram.ext import Application
+# Запускаем бота
+print("🤖 Бот запускается...")
+print(f"👑 Админы: {ADMIN_IDS}")
+print(f"📢 Канал: {CHANNEL_USERNAME}")
+print(f"💬 Чат: {CHAT_USERNAME}")
+print(f"🌐 Flask server on port: {PORT}")
 
-app = Application.builder().token(TOKEN).build()
+await app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+# ========== ЗАПУСК БОТА ==========
+def start_bot():
+    """Запуск Telegram бота"""
+    # Настройка логирования
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO
+    )
+    
+    # Запуск
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
 
 if __name__ == "__main__":
-    print("OK")
-    app.run_polling()
+    # Запускаем бота
+    print("🤖 Запуск Telegram бота...")
+    start_bot()
+
 
 

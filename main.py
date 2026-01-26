@@ -3913,36 +3913,33 @@ async def main():
     import logging
 from telegram import Update
 
-# Запускаем бота
-print("🤖 Бот запускается...")
-print(f"👑 Админы: {ADMIN_IDS}")
-print(f"📢 Канал: {CHANNEL_USERNAME}")
-print(f"💬 Чат: {CHAT_USERNAME}")
-print(f"🌐 Flask server on port: {PORT}")
+# ==================== Основной запуск ====================
+async def main():
+    print("🤖 Бот запускается...")
+    print(f"👑 Админы: {ADMIN_IDS}")
+    print(f"📢 Канал: {CHANNEL_USERNAME}")
+    print(f"💬 Чат: {CHAT_USERNAME}")
 
-await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Здесь добавляем polling
+    await dp.start_polling(allowed_updates=Update.ALL_TYPES)
 
-# ========== ЗАПУСК БОТА ==========
+
+# ========== Запуск ==========
 def start_bot():
     """Запуск Telegram бота"""
-    # Настройка логирования
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO
     )
-    
-    # Запуск
+
     try:
-        asyncio.run(main())
+        asyncio.run(main())  # main() внутри себя делает await dp.start_polling()
     except KeyboardInterrupt:
         print("\n👋 Бот остановлен")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
 
+
 if __name__ == "__main__":
-    # Запускаем бота
     print("🤖 Запуск Telegram бота...")
     start_bot()
-
-
-

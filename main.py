@@ -2,13 +2,18 @@
 import logging
 import json
 import random
+import asyncio
 import datetime
 import os
 import secrets
 import string
 import ssl
 import math
+import threading
 from typing import Dict, List, Tuple, Optional, Any
+from flask import Flask, jsonify
+from threading import Thread
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -22,7 +27,6 @@ import psycopg2
 from psycopg2 import pool, extras
 
 from dataclasses import dataclass, field
-from contextlib import asynccontextmanager
 import aiohttp
 
 # ========== КОНФИГУРАЦИЯ ==========
@@ -31,19 +35,43 @@ ADMIN_IDS = json.loads(os.environ.get("ADMIN_IDS", "[123456789]"))
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@nvibee_bet")
 CHAT_USERNAME = os.environ.get("CHAT_USERNAME", "@chatvibee_bet")
 DATABASE_URL = os.environ.get("DATABASE_URL")
+PORT = int(os.environ.get("PORT", 8000))
+
+# ========== FLASK ДЛЯ KEEP-ALIVE ==========
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return jsonify({
+        "status": "online",
+        "service": "Telegram Bot",
+        "timestamp": datetime.datetime.now().isoformat()
+    })
+
+@flask_app.route('/health')
+def health():
+    return jsonify({"status": "healthy"}), 200
+
+@flask_app.route('/ping')
+def ping():
+    return "pong", 200
+
+def run_flask():
+    """Запуск Flask сервера"""
+    print(f"🌐 Starting Flask server on port {PORT}")
+    flask_app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
 
 # Проверяем Supabase
 IS_SUPABASE = DATABASE_URL and "supabase" in DATABASE_URL.lower()
 if IS_SUPABASE:
     print("✅ Обнаружено подключение к Supabase")
-    # Для psycopg2 ssl добавляется через параметр sslmode
 elif DATABASE_URL:
     print("✅ Обнаружено подключение к PostgreSQL")
 else:
     print("⚠️ DATABASE_URL не задан")
 
 # ========== НАСТРОЙКИ ИГРЫ ==========
-REFERRAL_BONUS = 10000
+REFERRAL_BONUS = 50000  # Реферальный бонус 50к
 REFERRAL_PERCENTS = [0.05, 0.03, 0.01]
 REFERRAL_LEVELS = 3
 PROMOCODE_LENGTH = 8
@@ -150,7 +178,12 @@ EMOJIS = {
     "casino": "🎪",
     "crash": "💥",
     "blackjack": "🃏",
-    "gift": "🎁"
+    "gift": "🎁",
+    "user": "👤",
+    "referral": "👥",
+    "time": "⏰",
+    "coin": "🪙",
+    "card": "💳"
 }
 
 # ========== ФУНКЦИИ ХЕЛПЕРЫ ==========
@@ -393,8 +426,7 @@ class Database:
             print(f"❌ Ошибка инициализации БД: {e}")
         finally:
             self.pool.putconn(conn)
-    
-    async def get_user(self, user_id: int) -> Optional[User]:
+                async def get_user(self, user_id: int) -> Optional[User]:
         """Получить пользователя из БД"""
         if not self.pool:
             return None
@@ -591,10 +623,13 @@ async def get_or_create_user(user_id: int, username: str = "") -> User:
         user.username = username
         await db.save_user(user)
     return user
-    # ========== ОСНОВНЫЕ КОМАНДЫ ==========
+
+# ========== ОСНОВНЫЕ КОМАНДЫ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start"""
+    """Команда /start с регистрацией"""
     user = update.effective_user
+    
+    # Регистрация пользователя
     user_data = await get_or_create_user(user.id, user.username)
     
     # Проверка подписки
@@ -615,7 +650,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Основное меню
+    # Основное меню после регистрации
     keyboard = [
         [InlineKeyboardButton(f"{get_emoji('dice')} Игры", callback_data="games_menu"),
          InlineKeyboardButton(f"{get_emoji('work')} Работа", callback_data="work_menu")],
@@ -624,7 +659,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(f"{get_emoji('stats')} Профиль", callback_data="profile"),
          InlineKeyboardButton(f"{get_emoji('bank')} Банк", callback_data="bank_menu")],
         [InlineKeyboardButton(f"{get_emoji('market')} Биржа", callback_data="market"),
-         InlineKeyboardButton(f"{get_emoji('shop')} Магазин", callback_data="shop")]
+         InlineKeyboardButton(f"{get_emoji('shop')} Магазин", callback_data="shop")],
+        [InlineKeyboardButton(f"{get_emoji('referral')} Рефералы", callback_data="referral")]
     ]
     
     if user.id in ADMIN_IDS:
@@ -636,14 +672,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo="https://raw.githubusercontent.com/yourusername/yourrepo/main/start_img.jpg",
         caption="🎮 *Добро пожаловать в Vibe Bet!*\n\n"
                "Крути рулетку, рискуй в Краше, а также собирай свою ферму.\n\n"
-               f"{get_emoji('dice')} *Игры*: 🎲 Кости, ⚽ Футбол, 🎰 Рулетка, 💎 Алмазы, 💣 Мины\n"
-               f"{get_emoji('work')} *Заработок*: 👷 Работа, 🖥 Ферма BTC, 🎁 Бонус",
+               f"🎲 *Игры:* 🎲 Кости, ⚽ Футбол, 🎰 Рулетка, 💎 Алмазы, 💣 Мины\n"
+               f"⛏️ *Заработок:* 👷 Работа, 🖥 Ферма BTC, 🎁 Бонус",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
 
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /profile открывается на 'Я' или 'Профиль'"""
+    await profile(update, context)
+
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /profile"""
+    """Показать профиль пользователя"""
     user = update.effective_user
     user_data = await get_or_create_user(user.id, user.username)
     
@@ -657,10 +697,21 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 gpu_info = GPU_TYPES.get(gpu.gpu_type, {})
                 farm_income += gpu_info.get("income_per_hour", 0) * gpu.quantity * hours_passed
     
+    # Расчет следующего уровня
+    next_level_exp = LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4)
+    level_progress = (user_data.exp / next_level_exp) * 100
+    
+    # Создаем прогресс бар
+    progress_bar_length = 10
+    filled = int(progress_bar_length * level_progress / 100)
+    progress_bar = "█" * filled + "░" * (progress_bar_length - filled)
+    
     text = (
-        f"{get_emoji('stats')} *ПРОФИЛЬ*\n\n"
+        f"{get_emoji('user')} *ПРОФИЛЬ*\n\n"
         f"{get_emoji('id')} ID: `{user.id}`\n"
-        f"{get_emoji('level')} Уровень: *{user_data.level}* ({user_data.exp}/{LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4)} EXP)\n"
+        f"{get_emoji('level')} Уровень: *{user_data.level}*\n"
+        f"{get_emoji('exp')} Опыт: {user_data.exp}/{next_level_exp}\n"
+        f"{progress_bar} {level_progress:.1f}%\n\n"
         f"{get_emoji('money')} Баланс: *{format_number(user_data.balance)}*\n"
         f"{get_emoji('wins')} Побед: *{user_data.wins}*\n"
         f"{get_emoji('loses')} Поражений: *{user_data.loses}*\n"
@@ -668,16 +719,96 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{get_emoji('farm')} Доход фермы: *{farm_income:.2f} BTC/час*"
     )
     
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]]
+    if user_data.job:
+        job_info = JOBS.get(user_data.job, {})
+        text += f"\n{get_emoji('job')} Работа: *{job_info.get('name', 'Неизвестно')}*"
+    
+    keyboard = [
+        [InlineKeyboardButton(f"{get_emoji('stats')} Подробнее", callback_data="profile_detailed"),
+         InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def profile_detailed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подробный профиль"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    # Статистика
+    total_games = user_data.wins + user_data.loses
+    win_rate = (user_data.wins / total_games * 100) if total_games > 0 else 0
+    
+    # Реферальная информация
+    referral_link = f"https://t.me/{(await context.bot.get_me()).username}?start={user_data.referral_code}"
+    
+    text = (
+        f"{get_emoji('stats')} *ДЕТАЛЬНАЯ СТАТИСТИКА*\n\n"
+        f"{get_emoji('user')} Пользователь: @{user.username if user.username else 'Нет username'}\n"
+        f"{get_emoji('time')} Зарегистрирован: {user_data.registered.strftime('%d.%m.%Y %H:%M')}\n\n"
+        f"{get_emoji('stats')} *Игровая статистика:*\n"
+        f"🎮 Всего игр: {total_games}\n"
+        f"🏅 Побед: {user_data.wins}\n"
+        f"💔 Поражений: {user_data.loses}\n"
+        f"📊 Винрейт: {win_rate:.1f}%\n\n"
+        f"{get_emoji('referral')} *Реферальная система:*\n"
+        f"👥 Приглашено: {user_data.total_referrals}\n"
+        f"💰 Заработано: {format_number(user_data.referral_earnings)}\n"
+        f"🔗 Ваша ссылка: `{referral_link}`\n\n"
+        f"{get_emoji('alert')} Пригласи друга и получи {format_number(REFERRAL_BONUS)}!"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("🔙 Назад к профилю", callback_data="profile"),
+         InlineKeyboardButton("📋 Основное меню", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+# ========== КОМАНДЫ АЛИАСЫ ==========
+async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /balance или 'Баланс'"""
+    user = update.effective_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    await update.message.reply_text(
+        f"{get_emoji('money')} *Ваш баланс:* {format_number(user_data.balance)}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+async def level_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /level или 'Уровень'"""
+    user = update.effective_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    next_level_exp = LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4)
+    level_bonus = LEVEL_BONUS.get(user_data.level + 1, LEVEL_BONUS.get(user_data.level, 50000) + 25000)
+    
+    await update.message.reply_text(
+        f"{get_emoji('level')} *Уровень:* {user_data.level}\n"
+        f"{get_emoji('exp')} *EXP:* {user_data.exp}/{next_level_exp}\n"
+        f"{get_emoji('bonus')} *Следующий бонус:* {format_number(level_bonus)}\n\n"
+        f"{get_emoji('alert')} Получайте EXP за каждое действие в боте!",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 # ========== ИГРЫ ==========
 async def games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меню игр"""
     query = update.callback_query
-    await query.answer()
+    if query:
+        await query.answer()
+        message = query.message
+    else:
+        message = update.message
     
     keyboard = [
         [InlineKeyboardButton(f"{get_emoji('dice')} Кости", callback_data="game_dice"),
@@ -691,18 +822,22 @@ async def games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(
-        text="🎮 *ВЫБЕРИТЕ ИГРУ*\n\n"
-             "🎲 Кости - угадайте больше/меньше/равно\n"
-             "⚽ Футбол - угадайте гол/мимо\n"
-             "🎰 Рулетка - классическая рулетка\n"
-             "💎 Алмазы - найдите алмаз среди 16 ячеек\n"
-             "💣 Мины - избегайте мин\n"
-             "💥 Краш - выведите деньги до краха\n"
-             "🃏 Очко - наберите 21 очко",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=reply_markup
+    
+    text = (
+        "🎮 *ВЫБЕРИТЕ ИГРУ*\n\n"
+        "🎲 *Кости* - угадайте больше/меньше/равно\n"
+        "⚽ *Футбол* - угадайте гол/мимо\n"
+        "🎰 *Рулетка* - классическая рулетка\n"
+        "💎 *Алмазы* - найдите алмаз среди 16 ячеек\n"
+        "💣 *Мины* - избегайте мин\n"
+        "💥 *Краш* - выведите деньги до краха\n"
+        "🃏 *Очко* - наберите 21 очко"
     )
+    
+    if query:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 # Кости
 async def game_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -718,6 +853,7 @@ async def game_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await query.edit_message_text(
         text="🎲 *ИГРА В КОСТИ*\n\n"
              "Угадайте результат броска двух кубиков:\n"
@@ -739,7 +875,6 @@ async def dice_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     bet_type = query.data.split("_")[1]
     
-    # Запрос ставки
     await query.edit_message_text(
         text=f"🎲 *КОСТИ - {bet_type.upper()}*\n\n"
              f"{get_emoji('money')} Ваш баланс: {format_number(user_data.balance)}\n\n"
@@ -750,7 +885,7 @@ async def dice_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["bet_type"] = bet_type
 
 async def dice_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Игра в кости"""
+    """Игра в кости с эмодзи"""
     user = update.effective_user
     user_data = await get_or_create_user(user.id, user.username)
     
@@ -767,6 +902,16 @@ async def dice_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     bet_type = context.user_data.get("bet_type", "high")
+    
+    # Анимация броска
+    dice_emojis = ["🎲", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
+    msg = await update.message.reply_text("🎲 Бросаем кубики...")
+    
+    for i in range(3):
+        await asyncio.sleep(0.5)
+        await msg.edit_text(f"{dice_emojis[random.randint(1, 6)]} {dice_emojis[random.randint(1, 6)]}")
+    
+    await asyncio.sleep(0.5)
     
     # Бросок кубиков
     dice1 = random.randint(1, 6)
@@ -814,16 +959,21 @@ async def dice_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.exp += 1
         # Проверка уровня
         if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+            old_level = user_data.level
             user_data.level += 1
             user_data.exp = 0
             level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
             user_data.balance += level_bonus
-            await update.message.reply_text(
-                f"🎉 *НОВЫЙ УРОВЕНЬ!*\n\n"
+            
+            level_up_text = (
+                f"\n\n🎉 *НОВЫЙ УРОВЕНЬ!*\n\n"
                 f"{get_emoji('level')} Теперь у вас {user_data.level} уровень!\n"
-                f"{get_emoji('bonus')} Бонус: {format_number(level_bonus)}",
-                parse_mode=ParseMode.MARKDOWN
+                f"{get_emoji('bonus')} Бонус: {format_number(level_bonus)}"
             )
+        else:
+            level_up_text = ""
+    else:
+        level_up_text = ""
     
     await db.save_user(user_data)
     
@@ -837,13 +987,15 @@ async def dice_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if win_amount > 0:
         text += f"🎉 Выигрыш: {format_number(win_amount)} ({multiplier}x)\n"
+    
     text += f"💰 Баланс: {format_number(user_data.balance)}"
+    text += level_up_text
     
     keyboard = [[InlineKeyboardButton("🎲 Играть снова", callback_data="game_dice"),
                  InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    await msg.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 # Футбол
 async def game_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -889,7 +1041,7 @@ async def football_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["bet_type"] = bet_type
 
 async def football_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Игра в футбол"""
+    """Игра в футбол с анимацией эмодзи"""
     user = update.effective_user
     user_data = await get_or_create_user(user.id, user.username)
     
@@ -907,6 +1059,16 @@ async def football_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     bet_type = context.user_data.get("bet_type", "goal")
     
+    # Анимация удара
+    msg = await update.message.reply_text("⚽ Игрок готовится к удару...")
+    
+    # Анимация разбега
+    for _ in range(3):
+        await asyncio.sleep(0.3)
+        await msg.edit_text("⚽ Игрок разбегается...")
+        await asyncio.sleep(0.3)
+        await msg.edit_text("⚽ Игрок бьет!")
+    
     # Результат
     result = random.choice(["goal", "miss"])
     multiplier = 1.8 if result == "goal" else 2.2
@@ -914,11 +1076,16 @@ async def football_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Эмодзи для анимации
     if result == "goal":
-        emoji_seq = ["⚽", "➡️", "🥅", "🎉"]
+        animation = ["⚽", "➡️", "➡️", "🥅", "🎉", "🎉", "🎉"]
         result_text = "⚽ ГОООООЛ! 🎉"
     else:
-        emoji_seq = ["⚽", "➡️", "❌", "😔"]
+        animation = ["⚽", "➡️", "➡️", "❌", "😔", "😔", "😔"]
         result_text = "❌ МИМО... 😔"
+    
+    # Показываем анимацию
+    for frame in animation:
+        await asyncio.sleep(0.4)
+        await msg.edit_text(frame)
     
     # Расчет выигрыша
     if win:
@@ -932,17 +1099,28 @@ async def football_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.loses += 1
         win_text = f"😔 Вы не угадали. Проигрыш: {format_number(bet)}"
     
-    # Добавление EXP
+    # Добавление EXP с шансом 50%
     if random.random() < 0.5:
         user_data.exp += 1
+        # Проверка уровня
+        if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+            old_level = user_data.level
+            user_data.level += 1
+            user_data.exp = 0
+            level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+            user_data.balance += level_bonus
+            
+            level_up_text = (
+                f"\n\n🎉 *НОВЫЙ УРОВЕНЬ!*\n\n"
+                f"{get_emoji('level')} Теперь у вас {user_data.level} уровень!\n"
+                f"{get_emoji('bonus')} Бонус: {format_number(level_bonus)}"
+            )
+        else:
+            level_up_text = ""
+    else:
+        level_up_text = ""
     
     await db.save_user(user_data)
-    
-    # Анимация
-    message = await update.message.reply_text(" ".join(emoji_seq[:1]))
-    for i in range(2, len(emoji_seq) + 1):
-        await asyncio.sleep(0.5)
-        await message.edit_text(" ".join(emoji_seq[:i]))
     
     text = (
         f"⚽ *РЕЗУЛЬТАТ ФУТБОЛА*\n\n"
@@ -951,13 +1129,14 @@ async def football_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{win_text}\n\n"
         f"{get_emoji('money')} Ставка: {format_number(bet)}\n"
         f"💰 Баланс: {format_number(user_data.balance)}"
+        f"{level_up_text}"
     )
     
     keyboard = [[InlineKeyboardButton("⚽ Играть снова", callback_data="game_football"),
                  InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    await msg.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
     # Рулетка
 async def game_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Рулетка"""
@@ -1031,7 +1210,16 @@ async def roulette_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bet_type = context.user_data.get("roulette_type", "red")
     bet_value = context.user_data.get("roulette_value", "")
     
-    # Вращение рулетки
+    # Анимация вращения рулетки
+    msg = await update.message.reply_text("🎰 Крутим рулетку...")
+    
+    # Анимация чисел
+    for i in range(5):
+        await asyncio.sleep(0.3)
+        random_num = random.randint(0, 36)
+        await msg.edit_text(f"🎰 Выпадает: {random_num}")
+    
+    # Финальный результат
     number = random.randint(0, 36)
     is_red = number in [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
     is_black = number in [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35]
@@ -1080,9 +1268,26 @@ async def roulette_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.loses += 1
         win_text = f"😔 Вы проиграли. Проигрыш: {format_number(bet)}"
     
-    # Добавление EXP
+    # Добавление EXP с шансом 50%
     if random.random() < 0.5:
         user_data.exp += 1
+        # Проверка уровня
+        if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+            old_level = user_data.level
+            user_data.level += 1
+            user_data.exp = 0
+            level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+            user_data.balance += level_bonus
+            
+            level_up_text = (
+                f"\n\n🎉 *НОВЫЙ УРОВЕНЬ!*\n\n"
+                f"{get_emoji('level')} Теперь у вас {user_data.level} уровень!\n"
+                f"{get_emoji('bonus')} Бонус: {format_number(level_bonus)}"
+            )
+        else:
+            level_up_text = ""
+    else:
+        level_up_text = ""
     
     await db.save_user(user_data)
     
@@ -1100,13 +1305,15 @@ async def roulette_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if win_amount > 0:
         text += f"🎉 Выигрыш: {format_number(win_amount)}\n"
+    
     text += f"💰 Баланс: {format_number(user_data.balance)}"
+    text += level_up_text
     
     keyboard = [[InlineKeyboardButton("🎰 Играть снова", callback_data="game_roulette"),
                  InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    await msg.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 # Алмазы
 async def game_diamonds(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1242,9 +1449,26 @@ async def diamond_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data.balance += win_amount - bet
     user_data.wins += 1
     
-    # Добавление EXP
+    # Добавление EXP с шансом 50%
     if random.random() < 0.5:
         user_data.exp += 1
+        # Проверка уровня
+        if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+            old_level = user_data.level
+            user_data.level += 1
+            user_data.exp = 0
+            level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+            user_data.balance += level_bonus
+            
+            level_up_text = (
+                f"\n\n🎉 *НОВЫЙ УРОВЕНЬ!*\n\n"
+                f"{get_emoji('level')} Теперь у вас {user_data.level} уровень!\n"
+                f"{get_emoji('bonus')} Бонус: {format_number(level_bonus)}"
+            )
+        else:
+            level_up_text = ""
+    else:
+        level_up_text = ""
     
     await db.save_user(user_data)
     
@@ -1255,6 +1479,7 @@ async def diamond_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{get_emoji('money')} Ставка: {format_number(bet)}\n"
         f"💰 Выигрыш: {format_number(win_amount)}\n"
         f"💎 Баланс: {format_number(user_data.balance)}"
+        f"{level_up_text}"
     )
     
     keyboard = [[InlineKeyboardButton("💎 Играть снова", callback_data="game_diamonds"),
@@ -1419,9 +1644,26 @@ async def mines_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data.balance += win_amount - bet
     user_data.wins += 1
     
-    # Добавление EXP
+    # Добавление EXP с шансом 50%
     if random.random() < 0.5:
         user_data.exp += 1
+        # Проверка уровня
+        if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+            old_level = user_data.level
+            user_data.level += 1
+            user_data.exp = 0
+            level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+            user_data.balance += level_bonus
+            
+            level_up_text = (
+                f"\n\n🎉 *НОВЫЙ УРОВЕНЬ!*\n\n"
+                f"{get_emoji('level')} Теперь у вас {user_data.level} уровень!\n"
+                f"{get_emoji('bonus')} Бонус: {format_number(level_bonus)}"
+            )
+        else:
+            level_up_text = ""
+    else:
+        level_up_text = ""
     
     await db.save_user(user_data)
     
@@ -1433,6 +1675,19 @@ async def mines_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{get_emoji('money')} Ставка: {format_number(bet)}\n"
         f"💰 Выигрыш: {format_number(win_amount)}\n"
         f"💣 Баланс: {format_number(user_data.balance)}"
+        f"{level_up_text}"
+    )
+    
+    keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
+    text = (
+        f"💣 *МИНЫ - РЕЗУЛЬТАТ*\n\n"
+        f"✅ Открыто ячеек: {len(context.user_data.get('mines_opened', []))}\n"
+        f"🎯 Множитель: {multiplier}x\n"
+        f"🎉 Вы успешно забрали выигрыш!\n\n"
+        f"{get_emoji('money')} Ставка: {format_number(bet)}\n"
+        f"💰 Выигрыш: {format_number(win_amount)}\n"
+        f"💣 Баланс: {format_number(user_data.balance)}"
+        f"{level_up_text}"
     )
     
     keyboard = [[InlineKeyboardButton("💣 Играть снова", callback_data="game_mines"),
@@ -1440,7 +1695,8 @@ async def mines_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-    # Краш
+
+# Краш
 async def game_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Игра Краш"""
     query = update.callback_query
@@ -1517,9 +1773,16 @@ async def crash_animation(update: Update, context: ContextTypes.DEFAULT_TYPE, us
             user_data.balance += win_amount - bet
             user_data.wins += 1
             
-            # Добавление EXP
+            # Добавление EXP с шансом 50%
             if random.random() < 0.5:
                 user_data.exp += 1
+                # Проверка уровня
+                if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+                    old_level = user_data.level
+                    user_data.level += 1
+                    user_data.exp = 0
+                    level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+                    user_data.balance += level_bonus
             
             await db.save_user(user_data)
             
@@ -1565,7 +1828,7 @@ async def crash_animation(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     user_data.balance -= bet
     user_data.loses += 1
     
-    # Добавление EXP
+    # Добавление EXP с шансом 50%
     if random.random() < 0.5:
         user_data.exp += 1
     
@@ -1687,9 +1950,16 @@ async def blackjack_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"🤵 *Карты дилера:* {format_hand(dealer_hand)} ({dealer_score_full if 'dealer_score_full' in locals() else dealer_score})\n"
             text += f"💰 Выигрыш: {format_number(win_amount) if 'win_amount' in locals() else format_number(bet)}"
             
-            # Добавление EXP
+            # Добавление EXP с шансом 50%
             if random.random() < 0.5:
                 user_data.exp += 1
+                # Проверка уровня
+                if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+                    old_level = user_data.level
+                    user_data.level += 1
+                    user_data.exp = 0
+                    level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+                    user_data.balance += level_bonus
             
             await db.save_user(user_data)
             
@@ -1728,9 +1998,16 @@ async def blackjack_hit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data.balance -= bet
         user_data.loses += 1
         
-        # Добавление EXP
+        # Добавление EXP с шансом 50%
         if random.random() < 0.5:
             user_data.exp += 1
+            # Проверка уровня
+            if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+                old_level = user_data.level
+                user_data.level += 1
+                user_data.exp = 0
+                level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+                user_data.balance += level_bonus
         
         await db.save_user(user_data)
         
@@ -1813,9 +2090,16 @@ async def blackjack_stand(update: Update, context: ContextTypes.DEFAULT_TYPE):
         win_amount = bet
         result = "🤝 Ничья!"
     
-    # Добавление EXP
+    # Добавление EXP с шансом 50%
     if random.random() < 0.5:
         user_data.exp += 1
+        # Проверка уровня
+        if user_data.exp >= LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4):
+            old_level = user_data.level
+            user_data.level += 1
+            user_data.exp = 0
+            level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
+            user_data.balance += level_bonus
     
     await db.save_user(user_data)
     
@@ -1834,40 +2118,34 @@ async def blackjack_stand(update: Update, context: ContextTypes.DEFAULT_TYPE):
                  InlineKeyboardButton("🔙 В меню", callback_data="games_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-
-# ========== БИРЖА BTC ==========
-async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Биржа BTC"""
-    query = update.callback_query if update.callback_query else None
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)    
+    # ========== БАНК ==========
+async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню банка"""
+    query = update.callback_query
+    user = query.from_user if query else update.effective_user
     
-    global btc_price, last_btc_update
-    
-    # Обновляем цену раз в час
-    now = datetime.datetime.now()
-    if (now - last_btc_update).total_seconds() > 3600:
-        btc_price = random.randint(10000, 150000)
-        last_btc_update = now
+    user_data = await get_or_create_user(user.id, user.username)
     
     keyboard = [
-        [InlineKeyboardButton(f"{get_emoji('btc')} Купить BTC", callback_data="market_buy"),
-         InlineKeyboardButton(f"{get_emoji('money')} Продать BTC", callback_data="market_sell")],
-        [InlineKeyboardButton("🔄 Обновить", callback_data="market"),
-         InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+        [InlineKeyboardButton(f"{get_emoji('deposit')} Пополнить", callback_data="bank_deposit"),
+         InlineKeyboardButton(f"{get_emoji('withdraw')} Снять", callback_data="bank_withdraw")],
+        [InlineKeyboardButton(f"{get_emoji('transfer')} Перевести", callback_data="bank_transfer"),
+         InlineKeyboardButton(f"{get_emoji('stats')} Статистика", callback_data="bank_stats")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    user_id = query.from_user.id if query else update.effective_user.id
-    user_data = await get_or_create_user(user_id)
+    # Расчет ежедневных процентов
+    daily_interest = int(user_data.bank * 0.05)
     
     text = (
-        f"{get_emoji('market')} *БИРЖА BTC*\n\n"
-        f"{get_emoji('btc')} Текущий курс: 1 BTC = {format_number(btc_price)} ₽\n"
-        f"{get_emoji('alert')} Курс обновляется каждый час\n\n"
-        f"*Ваш баланс:*\n"
-        f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
-        f"{get_emoji('btc')} BTC: {user_data.btc:.6f}\n\n"
+        f"{get_emoji('bank')} *БАНК*\n\n"
+        f"{get_emoji('money')} *Наличные:* {format_number(user_data.balance)}\n"
+        f"{get_emoji('bank')} *В банке:* {format_number(user_data.bank)}\n\n"
+        f"{get_emoji('alert')} *Ежедневные проценты:* 5%\n"
+        f"{get_emoji('money')} *Завтра получите:* +{format_number(daily_interest)}\n\n"
         f"Выберите действие:"
     )
     
@@ -1876,8 +2154,8 @@ async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
-async def market_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Покупка BTC"""
+async def bank_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пополнение банка"""
     query = update.callback_query
     await query.answer()
     
@@ -1885,16 +2163,16 @@ async def market_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = await get_or_create_user(user.id, user.username)
     
     await query.edit_message_text(
-        text=f"{get_emoji('btc')} *ПОКУПКА BTC*\n\n"
-             f"{get_emoji('btc')} Курс: 1 BTC = {format_number(btc_price)} ₽\n"
-             f"{get_emoji('money')} Ваш баланс: {format_number(user_data.balance)}\n\n"
-             "Введите сумму в рублях для покупки BTC:",
+        text=f"{get_emoji('deposit')} *ПОПОЛНЕНИЕ БАНКА*\n\n"
+             f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
+             f"{get_emoji('bank')} В банке: {format_number(user_data.bank)}\n\n"
+             "Введите сумму для пополнения:",
         parse_mode=ParseMode.MARKDOWN
     )
-    context.user_data["action"] = "market_buy"
+    context.user_data["bank_action"] = "deposit"
 
-async def market_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Продажа BTC"""
+async def bank_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Снятие из банка"""
     query = update.callback_query
     await query.answer()
     
@@ -1902,97 +2180,199 @@ async def market_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = await get_or_create_user(user.id, user.username)
     
     await query.edit_message_text(
-        text=f"{get_emoji('money')} *ПРОДАЖА BTC*\n\n"
-             f"{get_emoji('btc')} Курс: 1 BTC = {format_number(btc_price)} ₽\n"
-             f"{get_emoji('btc')} Ваш BTC: {user_data.btc:.6f}\n\n"
-             "Введите количество BTC для продажи:",
+        text=f"{get_emoji('withdraw')} *СНЯТИЕ ИЗ БАНКА*\n\n"
+             f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
+             f"{get_emoji('bank')} В банке: {format_number(user_data.bank)}\n\n"
+             "Введите сумму для снятия:",
         parse_mode=ParseMode.MARKDOWN
     )
-    context.user_data["action"] = "market_sell"
-    async def handle_market_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка покупки/продажи BTC"""
+    context.user_data["bank_action"] = "withdraw"
+
+async def bank_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перевод другому пользователю"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('transfer')} *ПЕРЕВОД СРЕДСТВ*\n\n"
+             f"{get_emoji('money')} Ваш баланс: {format_number(user_data.balance)}\n\n"
+             "Введите в формате:\n"
+             "`ID_получателя СУММА`\n\n"
+             "Пример: `123456789 1000`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["bank_action"] = "transfer"
+
+async def bank_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика банка"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    # Расчет процентов
+    daily_interest = int(user_data.bank * 0.05)
+    weekly_interest = int(user_data.bank * 0.05 * 7)
+    monthly_interest = int(user_data.bank * 0.05 * 30)
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="bank_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    text = (
+        f"{get_emoji('stats')} *СТАТИСТИКА БАНКА*\n\n"
+        f"{get_emoji('money')} *Наличные:* {format_number(user_data.balance)}\n"
+        f"{get_emoji('bank')} *В банке:* {format_number(user_data.bank)}\n\n"
+        f"{get_emoji('alert')} *Ежедневный процент:* 5%\n\n"
+        f"{get_emoji('money')} *За день:* +{format_number(daily_interest)}\n"
+        f"{get_emoji('money')} *За неделю:* +{format_number(weekly_interest)}\n"
+        f"{get_emoji('money')} *За месяц:* +{format_number(monthly_interest)}\n\n"
+        f"{get_emoji('alert')} Проценты начисляются каждый день\n"
+        "в 00:00 по московскому времени."
+    )
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def handle_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка действий банка"""
     user = update.effective_user
     user_data = await get_or_create_user(user.id, user.username)
     
-    action = context.user_data.get("action")
+    action = context.user_data.get("bank_action")
     
-    try:
-        if action == "market_buy":
-            amount_rub = int(update.message.text)
-            if amount_rub < 100:
-                await update.message.reply_text(f"{get_emoji('alert')} Минимальная сумма: 100 ₽")
+    if action == "deposit":
+        try:
+            amount = int(update.message.text)
+            if amount < 100:
+                await update.message.reply_text(f"{get_emoji('alert')} Минимальная сумма: 100")
                 return
-            if amount_rub > user_data.balance:
+            if amount > user_data.balance:
+                await update.message.reply_text(f"{get_emoji('cross')} Недостаточно средств на балансе!")
+                return
+            
+            user_data.balance -= amount
+            user_data.bank += amount
+            
+            await db.save_user(user_data)
+            
+            text = (
+                f"{get_emoji('check')} *СРЕДСТВА ПОПОЛНЕНЫ!*\n\n"
+                f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
+                f"{get_emoji('bank')} Теперь в банке: {format_number(user_data.bank)}\n"
+                f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("🏦 Еще операция", callback_data="bank_menu"),
+                 InlineKeyboardButton("🔙 В меню", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+            
+        except ValueError:
+            await update.message.reply_text(f"{get_emoji('alert')} Введите число!")
+    
+    elif action == "withdraw":
+        try:
+            amount = int(update.message.text)
+            if amount < 100:
+                await update.message.reply_text(f"{get_emoji('alert')} Минимальная сумма: 100")
+                return
+            if amount > user_data.bank:
+                await update.message.reply_text(f"{get_emoji('cross')} Недостаточно средств в банке!")
+                return
+            
+            user_data.balance += amount
+            user_data.bank -= amount
+            
+            await db.save_user(user_data)
+            
+            text = (
+                f"{get_emoji('check')} *СРЕДСТВА СНЯТЫ!*\n\n"
+                f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
+                f"{get_emoji('bank')} Осталось в банке: {format_number(user_data.bank)}\n"
+                f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("🏦 Еще операция", callback_data="bank_menu"),
+                 InlineKeyboardButton("🔙 В меню", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+            
+        except ValueError:
+            await update.message.reply_text(f"{get_emoji('alert')} Введите число!")
+    
+    elif action == "transfer":
+        try:
+            parts = update.message.text.split()
+            if len(parts) != 2:
+                await update.message.reply_text(f"{get_emoji('alert')} Неверный формат! Используйте: `ID СУММА`")
+                return
+            
+            receiver_id = int(parts[0])
+            amount = int(parts[1])
+            
+            if amount < 100:
+                await update.message.reply_text(f"{get_emoji('alert')} Минимальная сумма перевода: 100")
+                return
+            if amount > user_data.balance:
                 await update.message.reply_text(f"{get_emoji('cross')} Недостаточно средств!")
                 return
             
-            btc_amount = amount_rub / btc_price
-            user_data.balance -= amount_rub
-            user_data.btc += btc_amount
+            # Получаем получателя
+            receiver_data = await get_or_create_user(receiver_id)
             
-            await db.save_user(user_data)
-            
-            text = (
-                f"{get_emoji('check')} *BTC КУПЛЕН!*\n\n"
-                f"{get_emoji('money')} Потрачено: {format_number(amount_rub)} ₽\n"
-                f"{get_emoji('btc')} Получено: {btc_amount:.6f} BTC\n"
-                f"{get_emoji('btc')} Всего BTC: {user_data.btc:.6f}\n"
-                f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}"
-            )
-            
-        elif action == "market_sell":
-            btc_amount = float(update.message.text)
-            if btc_amount <= 0:
-                await update.message.reply_text(f"{get_emoji('alert')} Введите положительное число!")
-                return
-            if btc_amount > user_data.btc:
-                await update.message.reply_text(f"{get_emoji('cross')} Недостаточно BTC!")
+            # Проверяем, не пытается ли перевести сам себе
+            if receiver_id == user.id:
+                await update.message.reply_text(f"{get_emoji('cross')} Нельзя переводить самому себе!")
                 return
             
-            rub_amount = int(btc_amount * btc_price)
-            user_data.btc -= btc_amount
-            user_data.balance += rub_amount
+            # Переводим средства
+            user_data.balance -= amount
+            receiver_data.balance += amount
             
             await db.save_user(user_data)
+            await db.save_user(receiver_data)
+            
+            # Отправляем уведомление получателю
+            try:
+                await context.bot.send_message(
+                    chat_id=receiver_id,
+                    text=f"{get_emoji('gift')} *ВЫ ПОЛУЧИЛИ ПЕРЕВОД!*\n\n"
+                         f"{get_emoji('user')} От: @{user.username if user.username else 'Аноним'}\n"
+                         f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
+                         f"{get_emoji('money')} Ваш баланс: {format_number(receiver_data.balance)}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass  # Если не удалось отправить сообщение
             
             text = (
-                f"{get_emoji('check')} *BTC ПРОДАН!*\n\n"
-                f"{get_emoji('btc')} Продано: {btc_amount:.6f} BTC\n"
-                f"{get_emoji('money')} Получено: {format_number(rub_amount)} ₽\n"
-                f"{get_emoji('btc')} Осталось BTC: {user_data.btc:.6f}\n"
-                f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}"
+                f"{get_emoji('check')} *ПЕРЕВОД ВЫПОЛНЕН!*\n\n"
+                f"{get_emoji('user')} Кому: ID {receiver_id}\n"
+                f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
+                f"{get_emoji('money')} Ваш баланс: {format_number(user_data.balance)}"
             )
-        
-        keyboard = [
-            [InlineKeyboardButton("🔄 Еще операция", callback_data="market"),
-             InlineKeyboardButton("🔙 В меню", callback_data="main_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-        
-    except ValueError:
-        await update.message.reply_text(f"{get_emoji('alert')} Введите число!")
-
-# ========== МАГАЗИН ==========
-async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Магазин"""
-    query = update.callback_query if update.callback_query else None
-    
-    text = (
-        f"{get_emoji('shop')} *МАГАЗИН*\n\n"
-        "🛒 Товары временно недоступны\n"
-        "Скоро здесь появятся уникальные предметы!\n\n"
-        "Следите за обновлениями!"
-    )
-    
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if query:
-        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+            
+            keyboard = [
+                [InlineKeyboardButton("🔁 Еще перевод", callback_data="bank_transfer"),
+                 InlineKeyboardButton("🔙 В меню", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+            
+        except ValueError:
+            await update.message.reply_text(f"{get_emoji('alert')} Ошибка! Убедитесь, что ID и сумма - числа!")
+        except Exception as e:
+            await update.message.reply_text(f"{get_emoji('alert')} Ошибка перевода: {str(e)}")
 
 # ========== ФЕРМА BTC ==========
 async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2021,7 +2401,7 @@ async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(f"{get_emoji('farm')} Собрать доход", callback_data="farm_collect")],
         [InlineKeyboardButton(f"{get_emoji('shop')} Купить видеокарты", callback_data="farm_buy")],
-        [InlineKeyboardButton("📊 Моя ферма", callback_data="farm_info"),
+        [InlineKeyboardButton(f"{get_emoji('stats')} Моя ферма", callback_data="farm_info"),
          InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
     ]
     
@@ -2032,12 +2412,15 @@ async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if user_farm:
         farm_text += f"{get_emoji('btc')} *Доход в час:*\n"
+        total_hourly = 0
         for farm in user_farm:
             gpu_info = GPU_TYPES.get(farm.gpu_type, {})
             hourly = gpu_info.get("income_per_hour", 0) * farm.quantity
+            total_hourly += hourly
             farm_text += f"  {get_gpu_display_name(farm.gpu_type)} x{farm.quantity}: {hourly:.2f} BTC/ч\n"
         
-        farm_text += f"\n{get_emoji('btc')} *Накоплено:* {btc_to_collect:.4f} BTC\n"
+        farm_text += f"\n{get_emoji('btc')} *Общий доход:* {total_hourly:.2f} BTC/ч\n"
+        farm_text += f"{get_emoji('btc')} *Накоплено:* {btc_to_collect:.4f} BTC\n"
         farm_text += f"{get_emoji('money')} *Примерная стоимость:* {format_number(int(btc_to_collect * btc_price))}\n"
     else:
         farm_text += "У вас пока нет видеокарт.\n"
@@ -2117,7 +2500,8 @@ async def farm_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_farm = await db.get_user_farm(query.from_user.id) if db else []
         farm_dict = {farm.gpu_type: farm for farm in user_farm}
         
-        current_quantity = farm_dict.get(gpu_type, BTCFarm(query.from_user.id, gpu_type)).quantity
+        current_farm = farm_dict.get(gpu_type, BTCFarm(query.from_user.id, gpu_type))
+        current_quantity = current_farm.quantity
         max_quantity = gpu_info["max_quantity"]
         
         if current_quantity >= max_quantity:
@@ -2259,31 +2643,194 @@ async def farm_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
-# ========== БАНК ==========
-async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню банка"""
+# ========== РАБОТА ==========
+async def work_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню работы"""
     query = update.callback_query if update.callback_query else None
     user = query.from_user if query else update.effective_user
     
     user_data = await get_or_create_user(user.id, user.username)
     
+    keyboard = []
+    for job_type, job_info in JOBS.items():
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{get_job_display_name(job_type)}",
+                callback_data=f"work_{job_type}"
+            )
+        ])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="main_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if user_data.job:
+        current_job = JOBS.get(user_data.job, {})
+        job_name = current_job.get("name", "Неизвестно")
+        text = f"{get_emoji('job')} *РАБОТА*\n\nТекущая работа: *{job_name}*"
+    else:
+        text = f"{get_emoji('job')} *РАБОТА*\n\nВыберите работу:"
+    
+    if query:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def work_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор работы"""
+    query = update.callback_query
+    await query.answer()
+    
+    job_type = query.data.split("_")[1]
+    job_info = JOBS.get(job_type)
+    
+    if not job_info:
+        await query.answer("Ошибка: работа не найдена", show_alert=True)
+        return
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    user_data.job = job_type
+    await db.save_user(user_data)
+    
+    text = (
+        f"{get_emoji('check')} *ВЫ УСТРОИЛИСЬ НА РАБОТУ!*\n\n"
+        f"{get_emoji('job')} Должность: {job_info['name']}\n"
+        f"{get_emoji('alert')} Описание: {job_info['description']}\n"
+        f"{get_emoji('money')} Зарплата: {format_number(job_info['min_salary'])}-{format_number(job_info['max_salary'])}\n"
+        f"{get_emoji('time')} Перерыв: {job_info['cooldown']//60} мин\n"
+        f"{get_emoji('btc')} Шанс BTC: {job_info['btc_chance']}%\n\n"
+        f"Используйте /work или 'Работа' для выполнения задания."
+    )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="work_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def work_perform(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выполнение работы"""
+    user = update.effective_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    if not user_data.job:
+        await update.message.reply_text(
+            f"{get_emoji('cross')} У вас нет работы! Выберите работу в меню.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    job_info = JOBS.get(user_data.job, {})
+    
+    # Проверка кулдауна
+    if user_data.last_work:
+        cooldown = job_info.get("cooldown", 300)
+        time_since = (datetime.datetime.now() - user_data.last_work).total_seconds()
+        
+        if time_since < cooldown:
+            remaining = cooldown - int(time_since)
+            minutes = remaining // 60
+            seconds = remaining % 60
+            
+            await update.message.reply_text(
+                f"{get_emoji('time')} *ОЖИДАНИЕ*\n\n"
+                f"Вы уже работали недавно.\n"
+                f"Осталось: {minutes} мин {seconds} сек",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+    
+    # Выполнение работы
+    salary = random.randint(job_info.get("min_salary", 10000), job_info.get("max_salary", 50000))
+    
+    # Проверка на BTC с шансом 9%
+    btc_found = random.random() * 100 < job_info.get("btc_chance", 9)
+    btc_amount = random.uniform(0.0001, 0.001) if btc_found else 0
+    
+    # Начисление
+    user_data.balance += salary
+    if btc_found:
+        user_data.btc += btc_amount
+    
+    user_data.last_work = datetime.datetime.now()
+    
+    # Добавление EXP с шансом 50%
+    if random.random() < 0.5:
+        user_data.exp += 1
+    
+    await db.save_user(user_data)
+    
+    # Формируем ответ
+    text = f"{get_emoji('check')} *РАБОТА ВЫПОЛНЕНА!*\n\n"
+    
+    # Анимация процесса работы
+    msg = await update.message.reply_text(f"{get_emoji('work')} Выполняем работу...")
+    
+    # Процесс работы в зависимости от типа
+    if user_data.job == "digger":
+        process = ["🔍 Ищем клады...", "⛏ Копаем...", "💰 Нашли сокровища!"]
+    elif user_data.job == "hacker":
+        process = ["💻 Взламываем систему...", "🔓 Обходим защиту...", "💾 Данные получены!"]
+    elif user_data.job == "miner":
+        process = ["⛏ Спускаемся в шахту...", "💎 Добываем криптовалюту...", "🪙 Нашли блок!"]
+    elif user_data.job == "trader":
+        process = ["📈 Анализируем рынок...", "💹 Совершаем сделки...", "💰 Успешная торговля!"]
+    else:
+        process = ["⚙ Выполняем работу...", "✅ Готово!"]
+    
+    for step in process:
+        await asyncio.sleep(1)
+        await msg.edit_text(f"{get_emoji('work')} {step}")
+    
+    await asyncio.sleep(1)
+    
+    text += f"{get_emoji('money')} *Зарплата:* {format_number(salary)}\n"
+    
+    if btc_found:
+        text += f"{get_emoji('btc')} *Найден BTC:* {btc_amount:.6f} (~{format_number(int(btc_amount * btc_price))})\n"
+    
+    text += f"\n{get_emoji('money')} *Баланс:* {format_number(user_data.balance)}\n"
+    
+    if btc_found:
+        text += f"{get_emoji('btc')} *BTC:* {user_data.btc:.6f}\n"
+    
+    text += f"\n{get_emoji('time')} Следующая работа через {job_info.get('cooldown', 300)//60} минут"
+    
+    await msg.edit_text(text, parse_mode=ParseMode.MARKDOWN)
+
+# ========== БИРЖА BTC ==========
+async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Биржа BTC"""
+    query = update.callback_query if update.callback_query else None
+    
+    global btc_price, last_btc_update
+    
+    # Обновляем цену раз в час
+    now = datetime.datetime.now()
+    if (now - last_btc_update).total_seconds() > 3600:
+        btc_price = random.randint(10000, 150000)
+        last_btc_update = now
+    
     keyboard = [
-        [InlineKeyboardButton(f"{get_emoji('deposit')} Пополнить", callback_data="bank_deposit"),
-         InlineKeyboardButton(f"{get_emoji('withdraw')} Снять", callback_data="bank_withdraw")],
-        [InlineKeyboardButton(f"{get_emoji('transfer')} Перевести", callback_data="bank_transfer"),
-         InlineKeyboardButton("📊 Статистика", callback_data="bank_stats")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+        [InlineKeyboardButton(f"{get_emoji('btc')} Купить BTC", callback_data="market_buy"),
+         InlineKeyboardButton(f"{get_emoji('money')} Продать BTC", callback_data="market_sell")],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="market"),
+         InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    user_id = query.from_user.id if query else update.effective_user.id
+    user_data = await get_or_create_user(user_id)
+    
     text = (
-        f"{get_emoji('bank')} *БАНК*\n\n"
-        f"{get_emoji('money')} *Наличные:* {format_number(user_data.balance)}\n"
-        f"{get_emoji('bank')} *В банке:* {format_number(user_data.bank)}\n\n"
-        f"{get_emoji('alert')} *Ежедневные проценты:* 5%\n"
-        f"Начисляются каждый день в 00:00 по МСК\n\n"
-        "Выберите действие:"
+        f"{get_emoji('market')} *БИРЖА BTC*\n\n"
+        f"{get_emoji('btc')} Текущий курс: 1 BTC = {format_number(btc_price)} ₽\n"
+        f"{get_emoji('alert')} Курс обновляется каждый час\n\n"
+        f"*Ваш баланс:*\n"
+        f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
+        f"{get_emoji('btc')} BTC: {user_data.btc:.6f}\n\n"
+        f"Выберите действие:"
     )
     
     if query:
@@ -2291,8 +2838,8 @@ async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
-async def bank_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пополнение банка"""
+async def market_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Покупка BTC"""
     query = update.callback_query
     await query.answer()
     
@@ -2300,75 +2847,673 @@ async def bank_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = await get_or_create_user(user.id, user.username)
     
     await query.edit_message_text(
-        text=f"{get_emoji('deposit')} *ПОПОЛНЕНИЕ БАНКА*\n\n"
-             f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
-             f"{get_emoji('bank')} В банке: {format_number(user_data.bank)}\n\n"
-             "Введите сумму для пополнения:",
-        parse_mode=ParseMode.MARKDOWN
-    )
-    context.user_data["action"] = "bank_deposit"
-
-async def bank_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Снятие из банка"""
-    query = update.callback_query
-    await query.answer()
-    
-    user = query.from_user
-    user_data = await get_or_create_user(user.id, user.username)
-    
-    await query.edit_message_text(
-        text=f"{get_emoji('withdraw')} *СНЯТИЕ ИЗ БАНКА*\n\n"
-             f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
-             f"{get_emoji('bank')} В банке: {format_number(user_data.bank)}\n\n"
-             "Введите сумму для снятия:",
-        parse_mode=ParseMode.MARKDOWN
-    )
-    context.user_data["action"] = "bank_withdraw"
-
-async def bank_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Перевод другому пользователю"""
-    query = update.callback_query
-    await query.answer()
-    
-    user = query.from_user
-    user_data = await get_or_create_user(user.id, user.username)
-    
-    await query.edit_message_text(
-        text=f"{get_emoji('transfer')} *ПЕРЕВОД СРЕДСТВ*\n\n"
+        text=f"{get_emoji('btc')} *ПОКУПКА BTC*\n\n"
+             f"{get_emoji('btc')} Курс: 1 BTC = {format_number(btc_price)} ₽\n"
              f"{get_emoji('money')} Ваш баланс: {format_number(user_data.balance)}\n\n"
-             "Введите в формате:\n"
-             "`ID_получателя СУММА`\n\n"
-             "Пример: `123456789 1000`",
+             "Введите сумму в рублях для покупки BTC:",
         parse_mode=ParseMode.MARKDOWN
     )
-    context.user_data["action"] = "bank_transfer"
+    context.user_data["market_action"] = "buy"
 
-async def bank_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Статистика банка"""
+async def market_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Продажа BTC"""
     query = update.callback_query
     await query.answer()
     
     user = query.from_user
     user_data = await get_or_create_user(user.id, user.username)
     
-    # Расчет ежедневных процентов
-    daily_interest = int(user_data.bank * 0.05)
+    await query.edit_message_text(
+        text=f"{get_emoji('money')} *ПРОДАЖА BTC*\n\n"
+             f"{get_emoji('btc')} Курс: 1 BTC = {format_number(btc_price)} ₽\n"
+             f"{get_emoji('btc')} Ваш BTC: {user_data.btc:.6f}\n\n"
+             "Введите количество BTC для продажи:",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["market_action"] = "sell"
+
+async def handle_market_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка покупки/продажи BTC"""
+    user = update.effective_user
+    user_data = await get_or_create_user(user.id, user.username)
     
-    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="bank_menu")]]
+    action = context.user_data.get("market_action")
+    
+    try:
+        if action == "buy":
+            amount_rub = int(update.message.text)
+            if amount_rub < 100:
+                await update.message.reply_text(f"{get_emoji('alert')} Минимальная сумма: 100 ₽")
+                return
+            if amount_rub > user_data.balance:
+                await update.message.reply_text(f"{get_emoji('cross')} Недостаточно средств!")
+                return
+            
+            btc_amount = amount_rub / btc_price
+            user_data.balance -= amount_rub
+            user_data.btc += btc_amount
+            
+            await db.save_user(user_data)
+            
+            text = (
+                f"{get_emoji('check')} *BTC КУПЛЕН!*\n\n"
+                f"{get_emoji('money')} Потрачено: {format_number(amount_rub)} ₽\n"
+                f"{get_emoji('btc')} Получено: {btc_amount:.6f} BTC\n"
+                f"{get_emoji('btc')} Всего BTC: {user_data.btc:.6f}\n"
+                f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}"
+            )
+            
+        elif action == "sell":
+            btc_amount = float(update.message.text)
+            if btc_amount <= 0:
+                await update.message.reply_text(f"{get_emoji('alert')} Введите положительное число!")
+                return
+            if btc_amount > user_data.btc:
+                await update.message.reply_text(f"{get_emoji('cross')} Недостаточно BTC!")
+                return
+            
+            rub_amount = int(btc_amount * btc_price)
+            user_data.btc -= btc_amount
+            user_data.balance += rub_amount
+            
+            await db.save_user(user_data)
+            
+            text = (
+                f"{get_emoji('check')} *BTC ПРОДАН!*\n\n"
+                f"{get_emoji('btc')} Продано: {btc_amount:.6f} BTC\n"
+                f"{get_emoji('money')} Получено: {format_number(rub_amount)} ₽\n"
+                f"{get_emoji('btc')} Осталось BTC: {user_data.btc:.6f}\n"
+                f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}"
+            )
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 Еще операция", callback_data="market"),
+             InlineKeyboardButton("🔙 В меню", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+        
+    except ValueError:
+        await update.message.reply_text(f"{get_emoji('alert')} Введите число!")
+
+# ========== БОНУСЫ ==========
+async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню бонусов"""
+    query = update.callback_query if update.callback_query else None
+    user = query.from_user if query else update.effective_user
+    
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    # Проверка ежедневного бонуса
+    can_claim_daily = True
+    daily_text = "🎁 *Ежедневный бонус* - доступен"
+    
+    if user_data.last_daily_bonus:
+        time_since = (datetime.datetime.now() - user_data.last_daily_bonus).total_seconds()
+        if time_since < 86400:  # 24 часа
+            can_claim_daily = False
+            hours_left = 24 - int(time_since // 3600)
+            minutes_left = 60 - int((time_since % 3600) // 60)
+            daily_text = f"⏰ *Ежедневный бонус* - через {hours_left}ч {minutes_left}м"
+    
+    keyboard = [
+        [InlineKeyboardButton(daily_text, callback_data="daily_bonus" if can_claim_daily else "bonus_cooldown")],
+        [InlineKeyboardButton(f"🏆 Бонус уровня ({format_number(LEVEL_BONUS.get(user_data.level, 50000))})", callback_data="level_bonus")],
+        [InlineKeyboardButton(f"🎫 Промокод", callback_data="promo_code")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     text = (
-        f"{get_emoji('stats')} *СТАТИСТИКА БАНКА*\n\n"
-        f"{get_emoji('money')} *Наличные:* {format_number(user_data.balance)}\n"
-        f"{get_emoji('bank')} *В банке:* {format_number(user_data.bank)}\n\n"
-        f"{get_emoji('alert')} *Ежедневный процент:* 5%\n"
-        f"{get_emoji('money')} *Завтра получите:* +{format_number(daily_interest)}\n\n"
-        f"{get_emoji('alert')} Проценты начисляются каждый день\n"
-        "в 00:00 по московскому времени."
+        f"{get_emoji('bonus')} *БОНУСЫ*\n\n"
+        f"Получайте награды за активность!\n\n"
+        f"{get_emoji('level')} Текущий уровень: {user_data.level}\n"
+        f"{get_emoji('bonus')} Бонус уровня: {format_number(LEVEL_BONUS.get(user_data.level, 50000))}"
     )
     
+    if query:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def daily_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ежедневный бонус"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    # Проверка кулдауна
+    if user_data.last_daily_bonus:
+        time_since = (datetime.datetime.now() - user_data.last_daily_bonus).total_seconds()
+        if time_since < 86400:  # 24 часа
+            hours_left = 24 - int(time_since // 3600)
+            minutes_left = 60 - int((time_since % 3600) // 60)
+            await query.answer(f"Бонус будет доступен через {hours_left}ч {minutes_left}м", show_alert=True)
+            return
+    
+    # Выдача бонуса
+    bonus_amount = random.randint(1000, 50000)
+    user_data.balance += bonus_amount
+    user_data.last_daily_bonus = datetime.datetime.now()
+    
+    await db.save_user(user_data)
+    
+    text = (
+        f"{get_emoji('gift')} *ЕЖЕДНЕВНЫЙ БОНУС!*\n\n"
+        f"{get_emoji('money')} Вы получили: {format_number(bonus_amount)}\n"
+        f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}\n\n"
+        f"{get_emoji('alert')} Следующий бонус через 24 часа"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="bonus")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-    # ========== ОБРАБОТКА CALLBACK-ЗАПРОСОВ ==========
+
+async def level_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Бонус за уровень"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    # Проверка, получал ли уже бонус за текущий уровень
+    if user_data.last_bonus and user_data.last_bonus.date() == datetime.datetime.now().date():
+        await query.answer(f"Вы уже получали бонус за уровень {user_data.level} сегодня", show_alert=True)
+        return
+    
+    # Выдача бонуса
+    bonus_amount = LEVEL_BONUS.get(user_data.level, 50000)
+    user_data.balance += bonus_amount
+    user_data.last_bonus = datetime.datetime.now()
+    
+    await db.save_user(user_data)
+    
+    text = (
+        f"{get_emoji('gift')} *БОНУС УРОВНЯ!*\n\n"
+        f"{get_emoji('level')} Уровень: {user_data.level}\n"
+        f"{get_emoji('money')} Бонус: {format_number(bonus_amount)}\n"
+        f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}\n\n"
+        f"{get_emoji('alert')} Бонус можно получать раз в день"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="bonus")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ввод промокода"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('gift')} *ПРОМОКОД*\n\n"
+             "Введите промокод для получения бонуса:",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["action"] = "promo_code"
+
+async def handle_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка промокода"""
+    user = update.effective_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    promo = update.message.text.upper().strip()
+    
+    # Здесь можно добавить проверку промокодов из базы данных
+    # Для примера, сделаем один рабочий промокод
+    if promo == "WELCOME2026":
+        bonus_amount = 25000
+        
+        # Проверяем, не использовал ли уже этот промокод
+        if "used_promos" not in context.user_data:
+            context.user_data["used_promos"] = []
+        
+        if promo in context.user_data["used_promos"]:
+            await update.message.reply_text(
+                f"{get_emoji('cross')} Вы уже использовали этот промокод!",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        user_data.balance += bonus_amount
+        context.user_data["used_promos"].append(promo)
+        await db.save_user(user_data)
+        
+        text = (
+            f"{get_emoji('gift')} *ПРОМОКОД АКТИВИРОВАН!*\n\n"
+            f"🎫 Код: {promo}\n"
+            f"{get_emoji('money')} Бонус: {format_number(bonus_amount)}\n"
+            f"{get_emoji('money')} Баланс: {format_number(user_data.balance)}"
+        )
+    else:
+        text = (
+            f"{get_emoji('cross')} *ПРОМОКОД НЕДЕЙСТВИТЕЛЕН*\n\n"
+            f"Промокод '{promo}' не найден или уже использован."
+        )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="bonus")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+# ========== РЕФЕРАЛЬНАЯ СИСТЕМА ==========
+async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Реферальная система"""
+    query = update.callback_query if update.callback_query else None
+    user = query.from_user if query else update.effective_user
+    
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    # Генерация реферальной ссылки
+    bot_username = (await context.bot.get_me()).username
+    referral_link = f"https://t.me/{bot_username}?start={user_data.referral_code}"
+    
+    # Расчет доходов с рефералов
+    level1_earnings = user_data.referral_earnings * 0.05
+    level2_earnings = user_data.referral_earnings * 0.03
+    level3_earnings = user_data.referral_earnings * 0.01
+    
+    text = (
+        f"{get_emoji('referral')} *РЕФЕРАЛЬНАЯ СИСТЕМА*\n\n"
+        f"{get_emoji('user')} Ваш реферальный код: `{user_data.referral_code}`\n"
+        f"{get_emoji('link')} Ваша ссылка: `{referral_link}`\n\n"
+        f"{get_emoji('people')} *Статистика:*\n"
+        f"👥 Приглашено: {user_data.total_referrals}\n"
+        f"💰 Заработано: {format_number(user_data.referral_earnings)}\n\n"
+        f"{get_emoji('money')} *Бонусы за приглашение:*\n"
+        f"1. Пригласивший получает {format_number(REFERRAL_BONUS)}\n"
+        f"2. Вы получаете 5% с дохода 1 уровня\n"
+        f"3. Вы получаете 3% с дохода 2 уровня\n"
+        f"4. Вы получаете 1% с дохода 3 уровня\n\n"
+        f"{get_emoji('alert')} Приглашайте друзей и зарабатывайте вместе!"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Скопировать ссылку", callback_data="copy_ref")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if query:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def copy_ref(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Копирование реферальной ссылки"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    user_data = await get_or_create_user(user.id, user.username)
+    
+    bot_username = (await context.bot.get_me()).username
+    referral_link = f"https://t.me/{bot_username}?start={user_data.referral_code}"
+    
+    await query.answer(f"Ссылка скопирована: {referral_link}", show_alert=True)
+
+# ========== АДМИН ПАНЕЛЬ ==========
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Админ панель"""
+    user = update.effective_user
+    if user.id not in ADMIN_IDS:
+        if update.callback_query:
+            await update.callback_query.answer("У вас нет доступа к этой команде!", show_alert=True)
+        else:
+            await update.message.reply_text("У вас нет доступа к этой команде!")
+        return
+    
+    keyboard = [
+        [InlineKeyboardButton("📊 Статистика бота", callback_data="admin_stats"),
+         InlineKeyboardButton("👤 Профиль игрока", callback_data="admin_user")],
+        [InlineKeyboardButton("💰 Выдать деньги", callback_data="admin_give_money"),
+         InlineKeyboardButton("❌ Забрать деньги", callback_data="admin_take_money")],
+        [InlineKeyboardButton("₿ Выдать BTC", callback_data="admin_give_btc"),
+         InlineKeyboardButton("🚫 Бан/Разбан", callback_data="admin_ban")],
+        [InlineKeyboardButton("📋 Логи", callback_data="admin_logs"),
+         InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    text = (
+        f"{get_emoji('admin')} *АДМИН ПАНЕЛЬ*\n\n"
+        f"Добро пожаловать, администратор {user.first_name}!\n"
+        f"Выберите действие:"
+    )
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика бота для админа"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    # Здесь можно добавить реальную статистику из БД
+    # Для примеры, просто покажем базовую информацию
+    
+    text = (
+        f"{get_emoji('stats')} *СТАТИСТИКА БОТА*\n\n"
+        f"🕐 Время запуска: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"💎 Курс BTC: {format_number(btc_price)} ₽\n"
+        f"⚙️ База данных: {'✅ Подключена' if db else '❌ Не подключена'}\n\n"
+        f"{get_emoji('alert')} *Для просмотра детальной статистики:*\n"
+        f"Используйте команду /stats в чате"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="admin_panel")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def admin_give_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выдача денег"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('money')} *ВЫДАЧА ДЕНЕГ*\n\n"
+             "Введите в формате:\n"
+             "`ID_игрока СУММА`\n\n"
+             "Пример: `123456789 100000`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["admin_action"] = "give_money"
+
+async def admin_take_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Забирание денег"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('money')} *ЗАБИРАНИЕ ДЕНЕГ*\n\n"
+             "Введите в формате:\n"
+             "`ID_игрока СУММА`\n\n"
+             "Пример: `123456789 50000`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["admin_action"] = "take_money"
+
+async def admin_give_btc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выдача BTC"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('btc')} *ВЫДАЧА BTC*\n\n"
+             "Введите в формате:\n"
+             "`ID_игрока КОЛИЧЕСТВО_BTC`\n\n"
+             "Пример: `123456789 0.5`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["admin_action"] = "give_btc"
+
+async def admin_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Бан/Разбан игрока"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('ban')} *БАН/РАЗБАН ИГРОКА*\n\n"
+             "Введите в формате:\n"
+             "`ID_игрока ПРИЧИНА`\n\n"
+             "Пример: `123456789 Нарушение правил`\n\n"
+             "Для разбана введите:\n"
+             "`разбан ID_игрока`\n\n"
+             "Пример: `разбан 123456789`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["admin_action"] = "ban"
+
+async def admin_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр профиля игрока"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    await query.edit_message_text(
+        text=f"{get_emoji('user')} *ПРОСМОТР ПРОФИЛЯ ИГРОКА*\n\n"
+             "Введите ID игрока для просмотра профиля:",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    context.user_data["admin_action"] = "view_user"
+
+async def admin_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр логов"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = query.from_user
+    if user.id not in ADMIN_IDS:
+        await query.answer("У вас нет доступа!", show_alert=True)
+        return
+    
+    # Здесь можно добавить логи из БД
+    # Для примера, просто покажем последние транзакции
+    
+    text = (
+        f"{get_emoji('logs')} *ЛОГИ СИСТЕМЫ*\n\n"
+        f"🕐 Последнее обновление: {datetime.datetime.now().strftime('%H:%M:%S')}\n"
+        f"📊 Всего игроков: (данные из БД)\n"
+        f"💸 Общий оборот: (данные из БД)\n\n"
+        f"{get_emoji('alert')} *Детальные логи:*\n"
+        f"Для просмотра детальных логов используйте команды:\n"
+        f"• /transactions - транзакции\n"
+        f"• /users - список пользователей"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="admin_panel")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+async def handle_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка действий админа"""
+    user = update.effective_user
+    if user.id not in ADMIN_IDS:
+        await update.message.reply_text("У вас нет доступа к этой команде!")
+        return
+    
+    action = context.user_data.get("admin_action")
+    text = update.message.text.strip()
+    
+    try:
+        if action == "give_money":
+            parts = text.split()
+            if len(parts) != 2:
+                await update.message.reply_text(f"{get_emoji('alert')} Неверный формат! Используйте: `ID СУММА`")
+                return
+            
+            receiver_id = int(parts[0])
+            amount = int(parts[1])
+            
+            if amount <= 0:
+                await update.message.reply_text(f"{get_emoji('alert')} Сумма должна быть положительной!")
+                return
+            
+            receiver_data = await get_or_create_user(receiver_id)
+            receiver_data.balance += amount
+            await db.save_user(receiver_data)
+            
+            result_text = (
+                f"{get_emoji('check')} *ДЕНЬГИ ВЫДАНЫ!*\n\n"
+                f"👤 Игрок: ID {receiver_id}\n"
+                f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
+                f"💰 Новый баланс: {format_number(receiver_data.balance)}"
+            )
+            
+        elif action == "take_money":
+            parts = text.split()
+            if len(parts) != 2:
+                await update.message.reply_text(f"{get_emoji('alert')} Неверный формат! Используйте: `ID СУММА`")
+                return
+            
+            receiver_id = int(parts[0])
+            amount = int(parts[1])
+            
+            if amount <= 0:
+                await update.message.reply_text(f"{get_emoji('alert')} Сумма должна быть положительной!")
+                return
+            
+            receiver_data = await get_or_create_user(receiver_id)
+            
+            if amount > receiver_data.balance:
+                amount = receiver_data.balance
+            
+            receiver_data.balance -= amount
+            await db.save_user(receiver_data)
+            
+            result_text = (
+                f"{get_emoji('check')} *ДЕНЬГИ ЗАБРАНЫ!*\n\n"
+                f"👤 Игрок: ID {receiver_id}\n"
+                f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
+                f"💰 Новый баланс: {format_number(receiver_data.balance)}"
+            )
+            
+        elif action == "give_btc":
+            parts = text.split()
+            if len(parts) != 2:
+                await update.message.reply_text(f"{get_emoji('alert')} Неверный формат! Используйте: `ID КОЛИЧЕСТВО_BTC`")
+                return
+            
+            receiver_id = int(parts[0])
+            btc_amount = float(parts[1])
+            
+            if btc_amount <= 0:
+                await update.message.reply_text(f"{get_emoji('alert')} Количество должно быть положительным!")
+                return
+            
+            receiver_data = await get_or_create_user(receiver_id)
+            receiver_data.btc += btc_amount
+            await db.save_user(receiver_data)
+            
+            result_text = (
+                f"{get_emoji('check')} *BTC ВЫДАН!*\n\n"
+                f"👤 Игрок: ID {receiver_id}\n"
+                f"{get_emoji('btc')} Количество: {btc_amount:.6f} BTC\n"
+                f"💰 Стоимость: ~{format_number(int(btc_amount * btc_price))}\n"
+                f"₿ Теперь BTC: {receiver_data.btc:.6f}"
+            )
+            
+        elif action == "ban":
+            if text.lower().startswith("разбан"):
+                parts = text.split()
+                if len(parts) != 2:
+                    await update.message.reply_text(f"{get_emoji('alert')} Неверный формат! Используйте: `разбан ID`")
+                    return
+                
+                user_id = int(parts[1])
+                user_data = await get_or_create_user(user_id)
+                user_data.is_banned = False
+                await db.save_user(user_data)
+                
+                result_text = (
+                    f"{get_emoji('check')} *ИГРОК РАЗБАНЕН!*\n\n"
+                    f"👤 Игрок: ID {user_id}\n"
+                    f"📛 Статус: Активен"
+                )
+            else:
+                parts = text.split(maxsplit=1)
+                if len(parts) != 2:
+                    await update.message.reply_text(f"{get_emoji('alert')} Неверный формат! Используйте: `ID ПРИЧИНА`")
+                    return
+                
+                user_id = int(parts[0])
+                reason = parts[1]
+                user_data = await get_or_create_user(user_id)
+                user_data.is_banned = True
+                await db.save_user(user_data)
+                
+                result_text = (
+                    f"{get_emoji('check')} *ИГРОК ЗАБАНЕН!*\n\n"
+                    f"👤 Игрок: ID {user_id}\n"
+                    f"📛 Причина: {reason}\n"
+                    f"🚫 Статус: Забанен"
+                )
+        
+        elif action == "view_user":
+            user_id = int(text)
+            user_data = await get_or_create_user(user_id)
+            
+            # Расчет статистики
+            total_games = user_data.wins + user_data.loses
+            win_rate = (user_data.wins / total_games * 100) if total_games > 0 else 0
+            
+            result_text = (
+                f"{get_emoji('user')} *ПРОФИЛЬ ИГРОКА*\n\n"
+                f"🆔 ID: {user_id}\n"
+                f"👤 Username: @{user_data.username if user_data.username else 'Нет'}\n"
+                f"📅 Регистрация: {user_data.registered.strftime('%d.%m.%Y')}\n\n"
+                f"{get_emoji('stats')} *Статистика:*\n"
+                f"💰 Баланс: {format_number(user_data.balance)}\n"
+                f"₿ BTC: {user_data.btc:.6f}\n"
+                f"🏦 В банке: {format_number(user_data.bank)}\n"
+                f"🏆 Уровень: {user_data.level} ({user_data.exp} EXP)\n"
+                f"🎮 Игр: {total_games}\n"
+                f"🏅 Побед: {user_data.wins}\n"
+                f"💔 Поражений: {user_data.loses}\n"
+                f"📊 Винрейт: {win_rate:.1f}%\n\n"
+                f"{get_emoji('referral')} *Рефералы:*\n"
+                f"👥 Приглашено: {user_data.total_referrals}\n"
+                f"💰 Заработано: {format_number(user_data.referral_earnings)}\n"
+                f"🔗 Код: {user_data.referral_code}\n\n"
+                f"🚫 Статус: {'Забанен' if user_data.is_banned else 'Активен'}"
+            )
+        
+        else:
+            await update.message.reply_text(f"{get_emoji('alert')} Неизвестное действие!")
+            return
+        
+        keyboard = [[InlineKeyboardButton("🔙 Назад в админку", callback_data="admin_panel")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(result_text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+        
+    except ValueError as e:
+        await update.message.reply_text(f"{get_emoji('alert')} Ошибка ввода данных: {str(e)}")
+    except Exception as e:
+        await update.message.reply_text(f"{get_emoji('alert')} Ошибка: {str(e)}")
+
+# ========== ОБРАБОТКА CALLBACK-ЗАПРОСОВ ==========
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback-запросов"""
     query = update.callback_query
@@ -2390,6 +3535,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Профиль
     elif data == "profile":
         await profile(update, context)
+    elif data == "profile_detailed":
+        await profile_detailed(update, context)
     
     # Игры
     elif data == "games_menu":
@@ -2413,10 +3560,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Кости
     elif data.startswith("dice_"):
-        await dice_bet(update, context)
-    elif data == "dice_high" or data == "dice_low" or data == "dice_equal":
-        context.user_data["game"] = "dice"
-        context.user_data["bet_type"] = data.split("_")[1]
         await dice_bet(update, context)
     
     # Футбол
@@ -2453,6 +3596,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "blackjack_stand":
         await blackjack_stand(update, context)
     
+    # Банк
+    elif data == "bank_menu":
+        await bank_menu(update, context)
+    elif data == "bank_deposit":
+        await bank_deposit(update, context)
+    elif data == "bank_withdraw":
+        await bank_withdraw(update, context)
+    elif data == "bank_transfer":
+        await bank_transfer(update, context)
+    elif data == "bank_stats":
+        await bank_stats(update, context)
+    
     # Биржа
     elif data == "market":
         await market(update, context)
@@ -2460,10 +3615,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await market_buy(update, context)
     elif data == "market_sell":
         await market_sell(update, context)
-    
-    # Магазин
-    elif data == "shop":
-        await shop(update, context)
     
     # Ферма
     elif data == "farm_menu":
@@ -2479,26 +3630,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "farm_info":
         await farm_info(update, context)
     
-    # Банк
-    elif data == "bank_menu":
-        await bank_menu(update, context)
-    elif data == "bank_deposit":
-        await bank_deposit(update, context)
-    elif data == "bank_withdraw":
-        await bank_withdraw(update, context)
-    elif data == "bank_transfer":
-        await bank_transfer(update, context)
-    elif data == "bank_stats":
-        await bank_stats(update, context)
-    
     # Работа
     elif data == "work_menu":
         await work_menu(update, context)
     elif data.startswith("work_"):
         if data == "work_perform":
             await work_perform(update, context)
-        elif data.startswith("work_confirm_"):
-            await work_confirm(update, context)
         else:
             await work_select(update, context)
     
@@ -2511,12 +3648,32 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await level_bonus(update, context)
     elif data == "promo_code":
         await promo_code(update, context)
+    elif data == "bonus_cooldown":
+        await query.answer("Бонус еще не доступен!", show_alert=True)
+    
+    # Рефералы
+    elif data == "referral":
+        await referral(update, context)
+    elif data == "copy_ref":
+        await copy_ref(update, context)
     
     # Админ-панель
     elif data == "admin_panel":
         await admin_panel(update, context)
     elif data == "admin_stats":
         await admin_stats(update, context)
+    elif data == "admin_give_money":
+        await admin_give_money(update, context)
+    elif data == "admin_take_money":
+        await admin_take_money(update, context)
+    elif data == "admin_give_btc":
+        await admin_give_btc(update, context)
+    elif data == "admin_ban":
+        await admin_ban(update, context)
+    elif data == "admin_user":
+        await admin_user(update, context)
+    elif data == "admin_logs":
+        await admin_logs(update, context)
     
     # Если не найдено обработчика
     else:
@@ -2555,28 +3712,25 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         elif game == "blackjack":
             await blackjack_play(update, context)
     
-    # Обработка действий банка/биржи
-    elif context.user_data.get("action"):
-        action = context.user_data["action"]
-        
-        if action.startswith("market_"):
-            await handle_market_action(update, context)
-        elif action.startswith("bank_"):
-            await handle_bank_action(update, context)
-        elif action == "promo_code":
-            await handle_promo_code(update, context)
+    # Обработка действий банка/биржи/бонусов
+    elif context.user_data.get("bank_action"):
+        await handle_bank_action(update, context)
+    elif context.user_data.get("market_action"):
+        await handle_market_action(update, context)
+    elif context.user_data.get("action") == "promo_code":
+        await handle_promo_code(update, context)
     
-    # Обработка админских команд
+    # Обработка админских действий
     elif context.user_data.get("admin_action"):
         await handle_admin_action(update, context)
     
-    # Обработка команд без слеша
-    elif text.lower() in ["профиль", "profile"]:
+    # Обработка команд без слеша (алиасы)
+    elif text.lower() in ["профиль", "profile", "я"]:
         await profile(update, context)
     elif text.lower() in ["игры", "games"]:
         await games_menu(update, context)
     elif text.lower() in ["работа", "work"]:
-        await work_menu(update, context)
+        await work_perform(update, context)
     elif text.lower() in ["ферма", "farm"]:
         await farm_menu(update, context)
     elif text.lower() in ["банк", "bank"]:
@@ -2589,7 +3743,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         await bonus(update, context)
     elif text.lower() in ["рефералы", "referral"]:
         await referral(update, context)
-    elif text.lower() in ["админ", "admin"]:
+    elif text.lower() in ["админ", "admin"] and user.id in ADMIN_IDS:
         await admin_panel(update, context)
     
     # Если это число, предлагаем игры
@@ -2613,99 +3767,72 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=reply_markup
             )
             context.user_data["quick_bet"] = amount
+            context.user_data["bet_amount"] = amount
 
 # ========== КОМАНДЫ ==========
-async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /balance"""
-    user = update.effective_user
-    user_data = await get_or_create_user(user.id, user.username)
-    
-    await update.message.reply_text(
-        f"{get_emoji('money')} *Ваш баланс:* {format_number(user_data.balance)}",
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def level_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /level"""
-    user = update.effective_user
-    user_data = await get_or_create_user(user.id, user.username)
-    
-    next_level_exp = LEVEL_EXP_REQUIREMENTS.get(user_data.level, 4)
-    level_bonus = LEVEL_BONUS.get(user_data.level, 50000)
-    
-    await update.message.reply_text(
-        f"{get_emoji('level')} *Уровень:* {user_data.level}\n"
-        f"{get_emoji('exp')} *EXP:* {user_data.exp}/{next_level_exp}\n"
-        f"{get_emoji('bonus')} *Бонус уровня:* {format_number(level_bonus)}\n\n"
-        f"{get_emoji('alert')} *Следующий уровень:*\n"
-        f"Требуется EXP: {next_level_exp}\n"
-        f"Бонус: {format_number(LEVEL_BONUS.get(user_data.level + 1, level_bonus + 25000))}",
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def job_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /job"""
-    await work_menu(update, context)
-
-async def farm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /farm"""
-    await farm_menu(update, context)
-
-async def bank_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /bank"""
-    await bank_menu(update, context)
-
-async def market_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /market"""
-    await market(update, context)
-
-async def bonus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /bonus"""
-    await bonus(update, context)
-
-async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /referral"""
-    await referral(update, context)
-
-# ========== АДМИН КОМАНДЫ ==========
-async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /admin"""
-    user = update.effective_user
-    if user.id not in ADMIN_IDS:
-        await update.message.reply_text("У вас нет доступа к этой команде!")
-        return
-    
-    await admin_panel(update, context)
-
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /stats (админ)"""
-    user = update.effective_user
-    if user.id not in ADMIN_IDS:
-        await update.message.reply_text("У вас нет доступа к этой команде!")
-        return
-    
-    # Простая статистика
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /help"""
     text = (
-        f"{get_emoji('stats')} *СТАТИСТИКА БОТА*\n\n"
-        f"🕐 *Время работы:* {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"💎 *Курс BTC:* {format_number(btc_price)} ₽\n"
-        f"⚙️ *База данных:* {'✅ Подключена' if db else '❌ Не подключена'}\n\n"
-        f"{get_emoji('alert')} *Для детальной статистики:*\n"
-        f"Используйте админ-панель"
+        f"{get_emoji('alert')} *ПОМОЩЬ ПО БОТУ*\n\n"
+        f"*Основные команды:*\n"
+        f"/start - Начать игру\n"
+        f"/profile или 'Я' - Профиль\n"
+        f"/balance или 'Баланс' - Баланс\n"
+        f"/level или 'Уровень' - Уровень\n"
+        f"/games или 'Игры' - Игры\n"
+        f"/work или 'Работа' - Работа\n"
+        f"/farm или 'Ферма' - Ферма BTC\n"
+        f"/bank или 'Банк' - Банк\n"
+        f"/market или 'Биржа' - Биржа BTC\n"
+        f"/bonus или 'Бонус' - Бонусы\n"
+        f"/referral или 'Рефералы' - Реферальная система\n\n"
+        f"*Игры:*\n"
+        f"🎲 Кости - угадайте результат\n"
+        f"⚽ Футбол - гол или мимо\n"
+        f"🎰 Рулетка - классическая рулетка\n"
+        f"💎 Алмазы - найдите алмаз\n"
+        f"💣 Мины - избегайте мин\n"
+        f"💥 Краш - выведите до краха\n"
+        f"🃏 Очко - наберите 21\n\n"
+        f"{get_emoji('alert')} *Поддержка:*\n"
+        f"По вопросам пишите: @support"
     )
     
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-# ========== ФУНКЦИЯ ДЛЯ ЕЖЕДНЕВНЫХ ПРОЦЕНТОВ ==========
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Магазин"""
+    query = update.callback_query if update.callback_query else None
+    
+    text = (
+        f"{get_emoji('shop')} *МАГАЗИН*\n\n"
+        "🛒 Товары временно недоступны\n"
+        "Скоро здесь появятся уникальные предметы!\n\n"
+        "Следите за обновлениями!"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if query:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+
+# ========== ЕЖЕДНЕВНЫЕ ПРОЦЕНТЫ ==========
 async def daily_interest_task(context: ContextTypes.DEFAULT_TYPE):
     """Ежедневное начисление процентов в банке"""
     if not db:
         return
     
     try:
-        # Получаем всех пользователей
-        async with db.pool.acquire() as conn:
-            users = await conn.fetch('SELECT * FROM users WHERE bank > 0')
+        # Получаем всех пользователей с деньгами в банке
+        # Для psycopg2 используем синхронный подход
+        conn = db.pool.getconn()
+        try:
+            cursor = conn.cursor(cursor_factory=extras.DictCursor)
+            cursor.execute('SELECT * FROM users WHERE bank > 0')
+            users = cursor.fetchall()
             
             for user_row in users:
                 user = User.from_dict(dict(user_row))
@@ -2728,7 +3855,10 @@ async def daily_interest_task(context: ContextTypes.DEFAULT_TYPE):
                     except:
                         pass  # Если не удалось отправить сообщение
         
-        print(f"✅ Начислены проценты {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            print(f"✅ Начислены проценты {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        finally:
+            db.pool.putconn(conn)
+            
     except Exception as e:
         print(f"❌ Ошибка при начислении процентов: {e}")
 
@@ -2754,19 +3884,20 @@ async def main():
     
     # Добавляем обработчики команд
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("profile", profile))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("balance", balance_command))
     app.add_handler(CommandHandler("level", level_command))
     app.add_handler(CommandHandler("games", games_menu))
-    app.add_handler(CommandHandler("job", job_command))
-    app.add_handler(CommandHandler("work", job_command))
-    app.add_handler(CommandHandler("farm", farm_command))
-    app.add_handler(CommandHandler("bank", bank_command))
-    app.add_handler(CommandHandler("market", market_command))
-    app.add_handler(CommandHandler("bonus", bonus_command))
-    app.add_handler(CommandHandler("referral", referral_command))
-    app.add_handler(CommandHandler("admin", admin_command))
-    app.add_handler(CommandHandler("stats", stats_command))
+    app.add_handler(CommandHandler("job", work_menu))
+    app.add_handler(CommandHandler("work", work_perform))
+    app.add_handler(CommandHandler("farm", farm_menu))
+    app.add_handler(CommandHandler("bank", bank_menu))
+    app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("bonus", bonus))
+    app.add_handler(CommandHandler("referral", referral))
+    app.add_handler(CommandHandler("shop", shop))
+    app.add_handler(CommandHandler("admin", admin_panel))
     
     # Добавляем обработчики callback-запросов
     app.add_handler(CallbackQueryHandler(callback_handler))
@@ -2777,11 +3908,10 @@ async def main():
     # Настраиваем задачу для ежедневных процентов
     job_queue = app.job_queue
     if job_queue:
-        # Начисляем проценты каждый день в 00:00 по МСК
-        # Для теста можно поставить каждую минуту: timedelta(minutes=1)
+        # Начисляем проценты каждый день в 21:00 UTC (00:00 МСК)
         job_queue.run_daily(
             daily_interest_task,
-            time=datetime.time(hour=21, minute=0),  # 00:00 МСК = 21:00 UTC
+            time=datetime.time(hour=21, minute=0),
             days=(0, 1, 2, 3, 4, 5, 6)
         )
         print("✅ Задача ежедневных процентов настроена")
@@ -2791,11 +3921,13 @@ async def main():
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"📢 Канал: {CHANNEL_USERNAME}")
     print(f"💬 Чат: {CHAT_USERNAME}")
+    print(f"🌐 Flask server on port: {PORT}")
     
     await app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# ========== ЗАПУСК БОТА ==========
-if __name__ == "__main__":
+# ========== ЗАПУСК БОТА И FLASK ==========
+def start_bot():
+    """Запуск Telegram бота"""
     # Настройка логирования
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -2809,3 +3941,13 @@ if __name__ == "__main__":
         print("\n👋 Бот остановлен")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
+
+if __name__ == "__main__":
+    # Запускаем Flask в отдельном потоке для Railway
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print(f"✅ Flask сервер запущен на порту {PORT}")
+    
+    # Запускаем бота
+    print("🤖 Запуск Telegram бота...")
+    start_bot()

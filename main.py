@@ -20,6 +20,26 @@ from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 
 # ========== КОНФИГУРАЦИЯ ==========
+def emoji(name: str) -> str:
+    emojis = {
+        'money': chr(0x1F4B0),      # 💰
+        'bank': chr(0x1F3E6),       # 🏦
+        'btc': chr(0x20BF),         # ₿
+        'level': chr(0x1F3C6),      # 🏆
+        'exp': chr(0x2B50),         # ⭐
+        'gpu': chr(0x1F3AE),        # 🎮
+        'job': chr(0x1F4BC),        # 💼
+        'wins': chr(0x1F3C5),       # 🏅
+        'loses': chr(0x1F494),      # 💔
+        'alert': chr(0x26A0) + chr(0xFE0F),  # ⚠️
+        'check': chr(0x2705),       # ✅
+        'cross': chr(0x274C),       # ❌
+    }
+    return emojis.get(name, '')
+
+# Использовать:
+text = f"{emoji('money')} Ваш баланс: *{format_number(user.balance)}*"
+
 TOKEN = os.environ.get("TOKEN", "ВАШ_ТОКЕН_БОТА")
 ADMIN_IDS = json.loads(os.environ.get("ADMIN_IDS", "[123456789]"))
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@nvibee_bet")

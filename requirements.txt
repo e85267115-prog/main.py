@@ -1,16 +1,4 @@
-# РАБОЧИЙ ДЛЯ RENDER (без компиляции)
-
-# 1. Telegram Bot
 python-telegram-bot==20.7
-
-# 2. ВМЕСТО asyncpg используем psycopg2-binary (не требует компиляции)
-psycopg2-binary==2.9.9
-
-# 3. Часовые пояса
-pytz==2024.1
-
-# 4. Конфигурация
-python-dotenv==1.0.0
-
-# 5. Асинхронность (если нужно)
-asyncio==3.4.3
+asyncpg==0.29.0
+pytz==2023.3.post1
+aiohttp==3.9.1

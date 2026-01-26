@@ -2017,7 +2017,7 @@ async def handle_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
             await db.save_user(user_data)
             
-            text = ( 
+            text = (
                 f"{get_emoji('check')} *СРЕДСТВА ПОПОЛНЕНЫ!*\n\n"
                 f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
                 f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
@@ -2039,7 +2039,7 @@ async def handle_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
             await db.save_user(user_data)
             
-             text = ( 
+            text = (
                 f"{get_emoji('check')} *СРЕДСТВА СНЯТЫ!*\n\n"
                 f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
                 f"{get_emoji('money')} Наличные: {format_number(user_data.balance)}\n"
@@ -2098,22 +2098,7 @@ async def handle_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except:
                 pass  # Если не удалось отправить уведомление
             
-            text = ( 
-                f"{get_emoji('check')} *ПЕРЕВОД ВЫПОЛНЕН!*\n\n"
-                f"👤 Получатель: {receiver_id}\n"
-                f"{get_emoji('money')} Сумма: {format_number(amount)}\n"
-                f"{get_emoji('money')} Ваш баланс: {format_number(user_data.balance)}\n\n"
-                f"{get_emoji('alert')} Получатель уведомлен о переводе."
-            )
-        
-        keyboard = [
-            [InlineKeyboardButton("🏦 В банк", callback_data="bank_menu"),
-             InlineKeyboardButton("🔙 В меню", callback_data="main_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-            text = ( 
+            text = (
                 f"{get_emoji('check')} *ПЕРЕВОД ВЫПОЛНЕН!*\n\n"
                 f"👤 Получатель: {receiver_id}\n"
                 f"{get_emoji('money')} Сумма: {format_number(amount)}\n"

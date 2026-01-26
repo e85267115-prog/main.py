@@ -3914,9 +3914,41 @@ async def main():
         print("✅ Задача ежедневных процентов настроена")
 
     # ---------------- Запуск бота ----------------
+    async def main():
     print("🤖 Бот запускается...")
-    print(f"👑 Админы: {ADMIN_IDS}")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print(f"💬 Чат: {CHAT_USERNAME}")
 
-    await app.run_polling(allowed_updates=None)  # Бот отвечает на все сообщения
+    # Подключение к базе данных
+    if db:
+        try:
+            await db.connect()
+            print("✅ Обнаружено подключение к Supabase")
+        except Exception as e:
+            print(f"❌ Ошибка подключения к БД: {e}")
+            print("⚠️ Бот будет работать без базы данных")
+
+    # Создаем приложение
+    app = Application.builder().token(TOKEN).build()
+
+    # Добавляем хэндлеры
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("profile", profile_command))
+    app.add_handler(CommandHandler("balance", balance_command))
+    app.add_handler(CommandHandler("level", level_command))
+    app.add_handler(CommandHandler("games", games_menu))
+    app.add_handler(CommandHandler("job", work_menu))
+    app.add_handler(CommandHandler("work", work_perform))
+    app.add_handler(CommandHandler("farm", farm_menu))
+    app.add_handler(CommandHandler("bank", bank_menu))
+    app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("bonus", bonus))
+    app.add_handler(CommandHandler("referral", referral))
+    app.add_handler(CommandHandler("shop", shop))
+    app.add_handler(CommandHandler("admin", admin_panel))
+
+    print("✅ Все хэндлеры добавлены. Стартуем polling...")
+
+    # Запуск бота
+    await app.run_polling(allowed_updates=None)
+
+    print("✅ Бот остановлен")  # Должно отобразиться только при завершении polling

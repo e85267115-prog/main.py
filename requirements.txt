@@ -1,4 +1,4 @@
 python-telegram-bot==20.7
-asyncpg==0.29.0
+psycopg2-binary==2.9.9
 pytz==2023.3.post1
 aiohttp==3.9.1

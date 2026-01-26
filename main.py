@@ -3896,6 +3896,18 @@ async def main():
     # ---------------- Текстовые сообщения ----------------
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
 
+    # ---------------- Подключение к базе (не блокирует) ----------------
+    if db:
+        async def connect_db():
+            try:
+                await db.connect()
+                print("✅ Обнаружено подключение к Supabase")
+            except Exception as e:
+                print(f"❌ Ошибка подключения к БД: {e}")
+
+        # создаём задачу, чтобы бот не ждал подключения
+        asyncio.create_task(connect_db())
+
     print("✅ Все хэндлеры добавлены. Стартуем polling...")
 
     # ---------------- Запуск бота ----------------

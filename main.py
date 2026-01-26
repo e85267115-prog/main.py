@@ -16,7 +16,7 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 import pytz
 import asyncpg  # <-- ОСТАЕТСЯ, НО С SSL НАСТРОЙКОЙ
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 
 # ========== КОНФИГУРАЦИЯ ==========
@@ -28,7 +28,7 @@ CHAT_USERNAME = os.environ.get("CHAT_USERNAME", "@chatvibee_bet")
 # Supabase строка подключения (получаем из переменных окружения Render)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-"# Проверяем, это Supabase или нет"
+# Проверяем, это Supabase или нет
 IS_SUPABASE = DATABASE_URL and "supabase" in DATABASE_URL.lower()
 
 if IS_SUPABASE:
@@ -40,8 +40,8 @@ elif DATABASE_URL:
     print("✅ Обнаружено подключение к PostgreSQL")
 else:
     print("⚠️ DATABASE_URL не задан, будет использовано локальное хранилище")
-"# Можно использовать SQLite для разработки"
-DATABASE_URL = None
+# Можно использовать SQLite для разработки
+# DATABASE_URL = None
 
 # ========== НАСТРОЙКИ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
 REFERRAL_BONUS = 10000  # Бонус за приглашенного пользователя
@@ -136,13 +136,13 @@ JOB_EMOJIS = {
 
 # Функции для получения отформатированных названий (добавьте после словарей):
 def get_gpu_display_name(gpu_type: str) -> str:
-    """Получить отформатированное название видеокарты с эмодзи"""
+    "Получить отформатированное название видеокарты с эмодзи"
     gpu = GPU_TYPES.get(gpu_type, {})
     emoji = GPU_EMOJIS.get(gpu_type, "🖥️")
     return f"{emoji} {gpu.get('name', 'Неизвестно')}"
 
 def get_job_display_name(job_type: str) -> str:
-    """Получить отформатированное название работы с эмодзи"""
+    "Получить отформатированное название работы с эмодзи"
     job = JOBS.get(job_type, {})
     emoji = JOB_EMOJIS.get(job_type, "💼")
     return f"{emoji} {job.get('name', 'Неизвестно')}"
@@ -157,7 +157,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class User:
     user_id: int
-    username: str = ""
+    username: str = "
     balance: int = 10000
     bank: int = 0
     btc: float = 0.0
@@ -168,10 +168,10 @@ class User:
     job: Optional[str] = None
     last_work: Optional[datetime.datetime] = None
     last_bonus: Optional[datetime.datetime] = None
-    registered: datetime.datetime = datetime.datetime.now()
+    registered: datetime.datetime = field(default_factory=datetime.datetime.now)
     last_daily_bonus: Optional[datetime.datetime] = None
     is_banned: bool = False
-    referral_code: str = ""
+    referral_code: str = "
     referred_by: Optional[int] = None
     total_referrals: int = 0
     referral_earnings: int = 0
@@ -203,7 +203,7 @@ class User:
     def from_dict(cls, data: Dict[str, Any]) -> 'User':
         user = cls(
             user_id=data["user_id"],
-            username=data.get("username", ""),
+            username=data.get("username", "),
             balance=data.get("balance", 10000),
             bank=data.get("bank", 0),
             btc=data.get("btc", 0.0),
@@ -213,7 +213,7 @@ class User:
             loses=data.get("loses", 0),
             job=data.get("job"),
             is_banned=data.get("is_banned", False),
-            referral_code=data.get("referral_code", ""),
+            referral_code=data.get("referral_code", "),
             referred_by=data.get("referred_by"),
             total_referrals=data.get("total_referrals", 0),
             referral_earnings=data.get("referral_earnings", 0)
@@ -264,14 +264,14 @@ class Database:
         self.is_supabase = connection_string and "supabase" in connection_string.lower()
     
     async def connect(self):
-        """Создание подключения к базе данных (с поддержкой Supabase SSL)"""
+        "Создание подключения к базе данных (с поддержкой Supabase SSL)"
         if not self.connection_string:
             logger.error("❌ DATABASE_URL не задан!")
-"# Можно добавить fallback на локальное хранилище"
+            # Можно добавить fallback на локальное хранилище
             return
         
         try:
-"# Настройки SSL для Supabase"
+# Настройки SSL для Supabase
             ssl_context = None
             if self.is_supabase:
                 ssl_context = ssl.create_default_context()
@@ -279,7 +279,7 @@ class Database:
                 ssl_context.verify_mode = ssl.CERT_NONE
                 logger.info("🔒 Использую SSL для Supabase")
             
-"# Создаем пул подключений с учетом ограничений Supabase Free"
+# Создаем пул подключений с учетом ограничений Supabase Free
             self.pool = await asyncpg.create_pool(
                 dsn=self.connection_string,
                 min_size=1,      # Минимум для бесплатного плана
@@ -290,7 +290,7 @@ class Database:
                 ssl=ssl_context if self.is_supabase else None,
                 server_settings={
                     'application_name': 'vibe-bet-bot',
-"'statement_timeout': '30000'  # 30 секунд таймаут"
+                    'statement_timeout': '30000'  # 30 секунд таймаут
                 }
             )
             await self.init_db()
@@ -304,18 +304,18 @@ class Database:
             raise
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к БД: {e}")
-"# Можно добавить fallback механизм"
+# Можно добавить fallback механизм
             raise
     
     async def init_db(self):
-""""Инициализация таблиц для Supabase/PostgreSQL""""
+        "Инициализация таблиц для Supabase/PostgreSQL"
         async with self.pool.acquire() as conn:
-"# Для Supabase убедимся, что используем правильную схему"
+# Для Supabase убедимся, что используем правильную схему
             if self.is_supabase:
                 await conn.execute('CREATE SCHEMA IF NOT EXISTS public')
                 await conn.execute('SET search_path TO public')
             
-"# Таблица пользователей"
+# Таблица пользователей
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id BIGINT PRIMARY KEY,
@@ -340,7 +340,7 @@ class Database:
                 )
             ''')
             
-"# Таблица фермы BTC"
+# Таблица фермы BTC
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS btc_farm (
                     user_id BIGINT,
@@ -351,7 +351,7 @@ class Database:
                 )
             ''')
             
-"# Таблица промокодов"
+# Таблица промокодов
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS promo_codes (
                     code TEXT PRIMARY KEY,
@@ -366,7 +366,7 @@ class Database:
                 )
             ''')
             
-"# Таблица использования промокодов"
+# Таблица использования промокодов
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS promo_uses (
                     id BIGSERIAL PRIMARY KEY,
@@ -376,7 +376,7 @@ class Database:
                 )
             ''')
             
-"# Таблица реферальных выплат"
+# Таблица реферальных выплат
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS referral_payments (
                     id BIGSERIAL PRIMARY KEY,
@@ -389,7 +389,7 @@ class Database:
                 )
             ''')
             
-"# Создаем индексы для производительности"
+# Создаем индексы для производительности
             indexes = [
                 'CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)',
                 'CREATE INDEX IF NOT EXISTS idx_users_banned ON users(is_banned)',
@@ -408,7 +408,7 @@ class Database:
     
     @asynccontextmanager
     async def get_connection(self):
-""""Контекстный менеджер для получения соединения""""
+        "Контекстный менеджер для получения соединения"
         if not self.pool:
             raise Exception("Пул соединений не инициализирован")
         
@@ -416,7 +416,7 @@ class Database:
             yield conn
     
     async def get_user(self, user_id: int) -> Optional[User]:
-""""Получение пользователя из БД""""
+        "Получение пользователя из БД"
         async with self.get_connection() as conn:
             row = await conn.fetchrow('SELECT * FROM users WHERE user_id = $1', user_id)
             if row:
@@ -424,7 +424,7 @@ class Database:
             return None
     
     async def save_user(self, user: User):
-""""Сохранение пользователя в БД""""
+        "Сохранение пользователя в БД"
         async with self.get_connection() as conn:
             await conn.execute('''
                 INSERT INTO users (
@@ -459,7 +459,7 @@ class Database:
             )
     
     async def get_user_by_ref_code(self, ref_code: str) -> Optional[User]:
-""""Получение пользователя по реферальному коду""""
+        "Получение пользователя по реферальному коду"
         async with self.get_connection() as conn:
             row = await conn.fetchrow('SELECT * FROM users WHERE referral_code = $1', ref_code)
             if row:
@@ -467,7 +467,7 @@ class Database:
             return None
     
     async def get_user_farm(self, user_id: int) -> List[BTCFarm]:
-""""Получение фермы пользователя""""
+        "Получение фермы пользователя"
         async with self.get_connection() as conn:
             rows = await conn.fetch('SELECT * FROM btc_farm WHERE user_id = $1', user_id)
             return [
@@ -480,7 +480,7 @@ class Database:
             ]
     
     async def update_farm(self, farm: BTCFarm):
-""""Обновление фермы""""
+        "Обновление фермы"
         async with self.get_connection() as conn:
             await conn.execute('''
                 INSERT INTO btc_farm (user_id, gpu_type, quantity, last_collected)
@@ -492,7 +492,7 @@ class Database:
     
     # ========== МЕТОДЫ ПРОМОКОДОВ ==========
     async def create_promo_code(self, promo: PromoCode) -> bool:
-""""Создание промокода""""
+        "Создание промокода"
         async with self.get_connection() as conn:
             try:
                 await conn.execute('''
@@ -510,7 +510,7 @@ class Database:
                 return False
     
     async def get_promo_code(self, code: str) -> Optional[PromoCode]:
-""""Получение промокода""""
+        "Получение промокода"
         async with self.get_connection() as conn:
             row = await conn.fetchrow('SELECT * FROM promo_codes WHERE code = $1', code)
             if row:
@@ -526,53 +526,31 @@ class Database:
                     is_active=row['is_active']
                 )
             return None
-            
-    async def use_promo_code(self, code: str, user_id: int):
-""""Получение промокода""""
-async def get_promo_code(self, code: str):
-    async with self.get_connection() as conn:
-        row = await conn.fetchrow(
-            'SELECT * FROM promo_codes WHERE code = $1 AND is_active = true',
-            code
-        )
-        if row:
-            return PromoCode(
-                code=row['code'],
-                promo_type=row['promo_type'],
-                value=row['value'],
-                created_by=row['created_by'],
-                created_at=row['created_at'],
-                expires_at=row['expires_at'],
-                max_uses=row['max_uses'],
-                current_uses=row['current_uses'],
-                is_active=row['is_active']
-            )
-        return None
 
-async def use_promo_code(self, code: str, user_id: int):
-""""Активация промокода""""
+    async def use_promo_code(self, code: str, user_id: int):
+        "Активация промокода"
     try:
         async with self.get_connection() as conn:
-"# 1. Проверяем существование и валидность промокода"
+# 1. Проверяем существование и валидность промокода
             promo = await self.get_promo_code(code)
             if not promo:
                 return False, "✗️ Промокод не найден", {}
             
-"# 2. Проверяем не истек ли срок"
+# 2. Проверяем не истек ли срок
             if promo.expires_at and promo.expires_at < datetime.now():
                 return False, "✗️ Промокод истек", {}
             
-"# 3. Проверяем лимит использований"
+# 3. Проверяем лимит использований
             if promo.current_uses >= promo.max_uses:
                 return False, "✗️ Лимит использований исчерпан", {}
             
-"# 4. Активируем промокод"
+# 4. Активируем промокод
             await conn.execute(
                 'UPDATE promo_codes SET current_uses = current_uses + 1 WHERE code = $1',
                 code
             )
             
-"# 5. Записываем использование"
+# 5. Записываем использование
             await conn.execute(
                 '''INSERT INTO promo_uses (user_id, promo_code, used_at) 
                    VALUES ($1, $2, NOW())''',
@@ -584,7 +562,7 @@ async def use_promo_code(self, code: str, user_id: int):
         return False, f"✗️ Ошибка: {str(e)}", {}
 
 async def get_user_promo_uses(self, user_id: int):
-""""Получение истории использования промокодов""""
+    "Получение истории использования промокодов"
     async with self.get_connection() as conn:
         rows = await conn.fetch(
             'SELECT * FROM promo_uses WHERE user_id = $1 ORDER BY used_at DESC',
@@ -601,7 +579,7 @@ async def get_user_promo_uses(self, user_id: int):
         
 # ========== МЕТОДЫ ПРОМОКОДОВ В КЛАССЕ DATABASE ==========
 async def create_promo_code(self, promo: PromoCode) -> bool:
-""""Создание промокода""""
+    "Создание промокода"
     async with self.get_connection() as conn:
         try:
             await conn.execute('''
@@ -619,7 +597,7 @@ async def create_promo_code(self, promo: PromoCode) -> bool:
             return False
 
 async def get_promo_code(self, code: str) -> Optional[PromoCode]:
-""""Получение промокода""""
+    "Получение промокода"
     async with self.get_connection() as conn:
         row = await conn.fetchrow('SELECT * FROM promo_codes WHERE code = $1', code)
         if row:
@@ -637,7 +615,7 @@ async def get_promo_code(self, code: str) -> Optional[PromoCode]:
         return None
 
 async def use_promo_code(self, code: str, user_id: int) -> Tuple[bool, str, Dict[str, Any]]:
-    """Использование промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    "Использование промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ"
     try:
         async with self.get_connection() as conn:
             # Проверяем, использовал ли уже пользователь этот промокод
@@ -701,7 +679,7 @@ async def use_promo_code(self, code: str, user_id: int) -> Tuple[bool, str, Dict
         return False, f"❌ Ошибка при активации промокода: {str(e)}", {}
 
 async def get_user_promo_uses(self, user_id: int) -> List[PromoUse]:
-""""Получение истории использования промокодов пользователем""""
+    "Получение истории использования промокодов пользователем"
     async with self.get_connection() as conn:
         rows = await conn.fetch(
             'SELECT * FROM promo_uses WHERE user_id = $1 ORDER BY used_at DESC',
@@ -717,7 +695,7 @@ async def get_user_promo_uses(self, user_id: int) -> List[PromoUse]:
         ]
 
 async def get_all_promo_codes(self) -> List[PromoCode]:
-""""Получение всех промокодов""""
+    "Получение всех промокодов"
     async with self.get_connection() as conn:
         rows = await conn.fetch('SELECT * FROM promo_codes ORDER BY created_at DESC')
         return [
@@ -737,7 +715,7 @@ async def get_all_promo_codes(self) -> List[PromoCode]:
 # ========== ОСНОВНЫЕ ФУНКЦИИ БОТА ДЛЯ ПРОМОКОДОВ ==========
 
 async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню промокодов""""
+    "Меню промокодов"
     query = update.callback_query
     await query.answer()
     
@@ -748,7 +726,7 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    promo_text = f"""
+    promo_text = f""
 "🎫 *ПРОМОКОДЫ*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -770,7 +748,7 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Стартовый бонус: 10,000"
 - За каждого реферала: {format_number(REFERRAL_BONUS)}
 - Ежедневный бонус: до {format_number(LEVEL_BONUS.get(5, 150000))}
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("🎫 Активировать промокод", callback_data="activate_promo")],
@@ -790,7 +768,7 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def activate_promo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Активация промокода через callback""""
+    "Активация промокода через callback"
     query = update.callback_query
     await query.answer()
     
@@ -802,18 +780,18 @@ async def activate_promo_callback(update: Update, context: ContextTypes.DEFAULT_
         return
     
     await query.edit_message_text(
-""🎫 *АКТИВАЦИЯ ПРОМОКОДА*\n\n""
-""Введите промокод:\n""
-""Например: `SUMMER2024` или `WELCOME100`\n\n""
+        "🎫 *АКТИВАЦИЯ ПРОМОКОДА*\n\n"
+        "Введите промокод:\n"
+        "Например: `SUMMER2024` или `WELCOME100`\n\n"
         "Или нажмите /promo [код]",
         parse_mode=ParseMode.MARKDOWN
     )
     
-"# Устанавливаем состояние ожидания промокода"
+# Устанавливаем состояние ожидания промокода
     context.user_data["awaiting_promo"] = True
 
 async def activate_promo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Активация промокода через команду""""
+    "Активация промокода через команду"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -823,10 +801,10 @@ async def activate_promo_command(update: Update, context: ContextTypes.DEFAULT_T
     
     if not context.args:
         await update.message.reply_text(
-""🎫 *Использование:*\n""
+"🎫 *Использование:*\n"
             "`/promo [код]`\n\n"
-""Пример: `/promo SUMMER2024`\n\n""
-""Или используйте меню промокодов: /menu","
+"Пример: `/promo SUMMER2024`\n\n"
+"Или используйте меню промокодов: /menu","
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -835,7 +813,7 @@ async def activate_promo_command(update: Update, context: ContextTypes.DEFAULT_T
     await process_promo_code(update, context, promo_code)
 
 async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE, promo_code: str):
-""""Обработка промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ""""
+    "Обработка промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ"
     if update.callback_query:
         user_id = update.callback_query.from_user.id
         is_callback = True
@@ -852,11 +830,11 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
             await update.message.reply_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Проверяем промокод"
+# Проверяем промокод
     success, message, bonus_data = await db.use_promo_code(promo_code, user_id)
     
     if success:
-"# Начисляем бонус"
+# Начисляем бонус
         bonus_type = bonus_data["type"]
         bonus_value = bonus_data["value"]
         
@@ -877,7 +855,7 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
             result_text += f"⭐ Получено: *{bonus_value} опыта*\n"
             result_text += f"⭐ Новый опыт: *{user.exp}/{LEVEL_EXP_REQUIREMENTS.get(user.level, 4*user.level)}*"
             
-"# Проверяем повышение уровня"
+# Проверяем повышение уровня
             exp_needed = LEVEL_EXP_REQUIREMENTS.get(user.level, 4 * user.level)
             if user.exp >= exp_needed:
                 user.level += 1
@@ -894,11 +872,11 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
     else:
         result_text = message
     
-"# Создаем клавиатуру для возврата"
+# Создаем клавиатуру для возврата
     keyboard = [[InlineKeyboardButton("🔙 В меню промокодов", callback_data="promo_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-"# Отправляем результат"
+# Отправляем результат
     if is_callback:
         await update.callback_query.edit_message_text(
             result_text,
@@ -925,7 +903,7 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
     )
 
 async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Создание промокода (админ) - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    "Создание промокода (админ) - ИСПРАВЛЕННАЯ ВЕРСИЯ"
     query = update.callback_query
     await query.answer()
     
@@ -946,14 +924,14 @@ async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
-""Выберите тип промокода:","
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+"Выберите тип промокода:","
         reply_markup=reply_markup,
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Выбор типа промокода для создания""""
+    "Выбор типа промокода для создания"
     query = update.callback_query
     await query.answer()
     
@@ -965,20 +943,20 @@ async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     promo_type = query.data.split("_")[2]  # create_promo_money -> money
     
-"# Сохраняем тип промокода в контексте"
+# Сохраняем тип промокода в контексте
     context.user_data["create_promo_type"] = promo_type
     
     type_names = {
-""money": "💰 Деньги","
-""btc": "₿ Bitcoin","
-""exp": "⭐ Опыт","
-""level": "🏆 Уровень""
+"money": "💰 Деньги","
+"btc": "₿ Bitcoin","
+"exp": "⭐ Опыт","
+"level": "🏆 Уровень"
     }
     
     await query.edit_message_text(
-"f"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
+f"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
         f"Тип: {type_names.get(promo_type, promo_type)}\n\n"
-"f"Введите значение промокода:\n""
+f"Введите значение промокода:\n"
         f"• Для денег: сумма (например: 10000)\n"
         f"• Для BTC: количество (например: 0.01)\n"
         f"• Для опыта: количество опыта (например: 10)\n"
@@ -989,7 +967,7 @@ async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["admin_action"] = "create_promo_value"
 
 async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка создания промокода""""
+    "Обработка создания промокода"
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
@@ -1000,10 +978,10 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if action == "create_promo_value":
         try:
-"# Получаем значение промокода"
+# Получаем значение промокода
             value_text = update.message.text.strip()
             
-"# Преобразуем значение в нужный тип"
+# Преобразуем значение в нужный тип
             promo_type = context.user_data.get("create_promo_type")
             
             if promo_type in ["money", "exp", "level"]:
@@ -1014,12 +992,12 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.message.reply_text("❌ Неизвестный тип промокода!")
                 return
             
-"# Сохраняем значение"
+# Сохраняем значение
             context.user_data["create_promo_value"] = value
             
-"# Запрашиваем количество использований"
+# Запрашиваем количество использований
             await update.message.reply_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
                 "Введите максимальное количество использований (1-1000):",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1036,10 +1014,10 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.message.reply_text("❌ Введите число от 1 до 1000!")
                 return
             
-"# Сохраняем количество использований"
+# Сохраняем количество использований
             context.user_data["create_promo_max_uses"] = max_uses
             
-"# Запрашиваем срок действия"
+# Запрашиваем срок действия
             keyboard = [
                 [InlineKeyboardButton("⏰ 1 час", callback_data="expire_1")],
                 [InlineKeyboardButton("⏰ 24 часа", callback_data="expire_24")],
@@ -1050,8 +1028,8 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
-""Выберите срок действия промокода:","
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+"Выберите срок действия промокода:","
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1060,7 +1038,7 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ Введите корректное число!")
 
 async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Установка срока действия промокода""""
+    "Установка срока действия промокода"
     query = update.callback_query
     await query.answer()
     
@@ -1078,13 +1056,13 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hours = int(expire_type)
         expires_at = datetime.datetime.now() + datetime.timedelta(hours=hours)
     
-"# Сохраняем срок действия"
+# Сохраняем срок действия
     context.user_data["create_promo_expires"] = expires_at
     
-"# Генерируем промокод"
+# Генерируем промокод
     promo_code = generate_promo_code()
     
-"# Создаем объект промокода"
+# Создаем объект промокода
     promo = PromoCode(
         code=promo_code,
         promo_type=context.user_data["create_promo_type"],
@@ -1097,21 +1075,21 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_active=True
     )
     
-"# Сохраняем промокод в БД"
+# Сохраняем промокод в БД
     success = await db.create_promo_code(promo)
     
     if success:
-"# Формируем информацию о промокоде"
+# Формируем информацию о промокоде
         type_names = {
-""money": "💰 Деньги","
-""btc": "₿ Bitcoin","
-""exp": "⭐ Опыт","
-""level": "🏆 Уровень""
+"money": "💰 Деньги","
+"btc": "₿ Bitcoin","
+"exp": "⭐ Опыт","
+"level": "🏆 Уровень"
         }
         
         expires_text = "Без срока" if not expires_at else expires_at.strftime('%d.%m.%Y %H:%M')
         
-        result_text = f"""
+        result_text = f""
 "✅ *ПРОМОКОД СОЗДАН!*"
 
 🎫 Код: `{promo_code}`
@@ -1121,7 +1099,7 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ⏰ Срок действия: {expires_text}
 📅 Создан: {promo.created_at.strftime('%d.%m.%Y %H:%M')}
 async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""История использованных промокодов""""
+    "История использованных промокодов"
     query = update.callback_query
     await query.answer()
     
@@ -1132,14 +1110,14 @@ async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем историю промокодов"
+# Получаем историю промокодов
     promo_uses = await db.get_user_promo_uses(user_id)
     
     if not promo_uses:
         await query.edit_message_text(
-""📭 *ИСТОРИЯ ПРОМОКОДОВ*\n\n""
-""Вы еще не использовали ни одного промокода.\n""
-""Следите за обновлениями и участвуйте в ивентах!","
+"📭 *ИСТОРИЯ ПРОМОКОДОВ*\n\n"
+"Вы еще не использовали ни одного промокода.\n"
+"Следите за обновлениями и участвуйте в ивентах!","
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -1147,7 +1125,7 @@ async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history_text = "📜 *ИСТОРИЯ ИСПОЛЬЗОВАННЫХ ПРОМОКОДОВ*\n\n"
     
     for i, promo_use in enumerate(promo_uses[:10], 1):  # Показываем последние 10
-"# Получаем информацию о промокоде"
+# Получаем информацию о промокоде
         promo_info = await db.get_promo_code(promo_use.promo_code)
         if promo_info:
             used_at = promo_use.used_at.strftime('%d.%m.%Y %H:%M')
@@ -1174,7 +1152,7 @@ async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Создание промокода (админ) - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+    "Создание промокода (админ) - ИСПРАВЛЕННАЯ ВЕРСИЯ"
     query = update.callback_query
     await query.answer()
     
@@ -1195,14 +1173,14 @@ async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
-""Выберите тип промокода:","
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+"Выберите тип промокода:","
         reply_markup=reply_markup,
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Выбор типа промокода для создания""""
+    "Выбор типа промокода для создания"
     query = update.callback_query
     await query.answer()
     
@@ -1214,20 +1192,20 @@ async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     promo_type = query.data.split("_")[2]  # create_promo_money -> money
     
-"# Сохраняем тип промокода в контексте"
+# Сохраняем тип промокода в контексте
     context.user_data["create_promo_type"] = promo_type
     
     type_names = {
-""money": "💰 Деньги","
-""btc": "₿ Bitcoin","
-""exp": "⭐ Опыт","
-""level": "🏆 Уровень""
+"money": "💰 Деньги","
+"btc": "₿ Bitcoin","
+"exp": "⭐ Опыт","
+"level": "🏆 Уровень"
     }
     
     await query.edit_message_text(
-"f"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
+f"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
         f"Тип: {type_names.get(promo_type, promo_type)}\n\n"
-"f"Введите значение промокода:\n""
+f"Введите значение промокода:\n"
         f"• Для денег: сумма (например: 10000)\n"
         f"• Для BTC: количество (например: 0.01)\n"
         f"• Для опыта: количество опыта (например: 10)\n"
@@ -1238,7 +1216,7 @@ async def create_promo_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["admin_action"] = "create_promo_value"
 
 async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка создания промокода""""
+    "Обработка создания промокода"
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
@@ -1249,10 +1227,10 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if action == "create_promo_value":
         try:
-"# Получаем значение промокода"
+# Получаем значение промокода
             value_text = update.message.text.strip()
             
-"# Преобразуем значение в нужный тип"
+# Преобразуем значение в нужный тип
             promo_type = context.user_data.get("create_promo_type")
             
             if promo_type in ["money", "exp", "level"]:
@@ -1263,12 +1241,12 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.message.reply_text("❌ Неизвестный тип промокода!")
                 return
             
-"# Сохраняем значение"
+# Сохраняем значение
             context.user_data["create_promo_value"] = value
             
-"# Запрашиваем количество использований"
+# Запрашиваем количество использований
             await update.message.reply_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
                 "Введите максимальное количество использований (1-1000):",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1285,10 +1263,10 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.message.reply_text("❌ Введите число от 1 до 1000!")
                 return
             
-"# Сохраняем количество использований"
+# Сохраняем количество использований
             context.user_data["create_promo_max_uses"] = max_uses
             
-"# Запрашиваем срок действия"
+# Запрашиваем срок действия
             keyboard = [
                 [InlineKeyboardButton("⏰ 1 час", callback_data="expire_1")],
                 [InlineKeyboardButton("⏰ 24 часа", callback_data="expire_24")],
@@ -1299,8 +1277,8 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
-""Выберите срок действия промокода:","
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+"Выберите срок действия промокода:","
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1309,7 +1287,7 @@ async def process_create_promo(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ Введите корректное число!")
 
 async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Установка срока действия промокода""""
+    "Установка срока действия промокода"
     query = update.callback_query
     await query.answer()
     
@@ -1327,13 +1305,13 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hours = int(expire_type)
         expires_at = datetime.datetime.now() + datetime.timedelta(hours=hours)
     
-"# Сохраняем срок действия"
+# Сохраняем срок действия
     context.user_data["create_promo_expires"] = expires_at
     
-"# Генерируем промокод"
+# Генерируем промокод
     promo_code = generate_promo_code()
     
-"# Создаем объект промокода"
+# Создаем объект промокода
     promo = PromoCode(
         code=promo_code,
         promo_type=context.user_data["create_promo_type"],
@@ -1346,21 +1324,21 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_active=True
     )
     
-"# Сохраняем промокод в БД"
+# Сохраняем промокод в БД
     success = await db.create_promo_code(promo)
     
     if success:
-"# Формируем информацию о промокоде"
+# Формируем информацию о промокоде
         type_names = {
-""money": "💰 Деньги","
-""btc": "₿ Bitcoin","
-""exp": "⭐ Опыт","
-""level": "🏆 Уровень""
+"money": "💰 Деньги","
+"btc": "₿ Bitcoin","
+"exp": "⭐ Опыт","
+"level": "🏆 Уровень"
         }
         
         expires_text = "Без срока" if not expires_at else expires_at.strftime('%d.%m.%Y %H:%M')
         
-        result_text = f"""
+        result_text = f""
 "✅ *ПРОМОКОД СОЗДАН!*"
 
 🎫 Код: `{promo_code}`
@@ -1372,10 +1350,10 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 "📋 *Использование:*"
 • Пользователь: `/promo {promo_code}`
-"• В меню: "Активировать промокод""
-"""
+"• В меню: "Активировать промокод"
+    ""
         
-"# Очищаем данные контекста"
+# Очищаем данные контекста
         context.user_data.pop("create_promo_type", None)
         context.user_data.pop("create_promo_value", None)
         context.user_data.pop("create_promo_max_uses", None)
@@ -1392,32 +1370,32 @@ async def set_promo_expire(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await query.edit_message_text(
-""❌ Ошибка при создании промокода!\n""
-""Попробуйте еще раз.","
+"❌ Ошибка при создании промокода!\n"
+"Попробуйте еще раз.","
             parse_mode=ParseMode.MARKDOWN
         )
 
 # ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 async def handle_promo_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка текстовых сообщений для промокодов""""
+    "Обработка текстовых сообщений для промокодов"
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
-"# Обработка ввода промокода"
+# Обработка ввода промокода
     if "awaiting_promo" in context.user_data:
         await process_promo_code(update, context, text.upper())
         context.user_data.pop("awaiting_promo", None)
         return
     
-"# Обработка создания промокода"
+# Обработка создания промокода
     elif "admin_action" in context.user_data:
         action = context.user_data["admin_action"]
         if action in ["create_promo_value", "create_promo_max_uses"]:
             await process_create_promo(update, context)
         return
     
-"# Команда /promo"
+# Команда /promo
     elif text.lower().startswith("/promo"):
         parts = text.split()
         if len(parts) >= 2:
@@ -1426,49 +1404,49 @@ async def handle_promo_messages(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await update.message.reply_text(
                 "🎫 *Использование:* /promo [КОД]\n\n"
-""Пример: `/promo WELCOME100`","
+"Пример: `/promo WELCOME100`","
                 parse_mode=ParseMode.MARKDOWN
             )
             
     # ========== МЕТОДЫ РЕФЕРАЛЬНОЙ СИСТЕМЫ ==========
     async def add_referral(self, referrer_id: int, referral_id: int):
-""""Добавление реферала""""
+        "Добавление реферала"
         async with self.get_connection() as conn:
-"# Обновляем счетчик рефералов у пригласившего"
+# Обновляем счетчик рефералов у пригласившего
             await conn.execute(
                 'UPDATE users SET total_referrals = total_referrals + 1 WHERE user_id = $1',
                 referrer_id
             )
             
-"# Начисляем бонус пригласившему"
+# Начисляем бонус пригласившему
             referrer = await self.get_user(referrer_id)
             if referrer:
                 referrer.balance += REFERRAL_BONUS
                 referrer.referral_earnings += REFERRAL_BONUS
                 await self.save_user(referrer)
             
-"# Обновляем поле referred_by у приглашенного"
+# Обновляем поле referred_by у приглашенного
             await conn.execute(
                 'UPDATE users SET referred_by = $1 WHERE user_id = $2',
                 referrer_id, referral_id
             )
     
     async def add_referral_payment(self, from_user_id: int, to_user_id: int, amount: int, percentage: float, level: int):
-""""Добавление реферальной выплаты""""
+        "Добавление реферальной выплаты"
         async with self.get_connection() as conn:
             await conn.execute('''
                 INSERT INTO referral_payments (from_user_id, to_user_id, amount, percentage, level, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6)
             ''', from_user_id, to_user_id, amount, percentage, level, datetime.datetime.now())
             
-"# Обновляем баланс получателя"
+# Обновляем баланс получателя
             await conn.execute(
                 'UPDATE users SET balance = balance + $1, referral_earnings = referral_earnings + $1 WHERE user_id = $2',
                 amount, to_user_id
             )
     
     async def get_referrals_tree(self, user_id: int, level: int = 1, max_level: int = 3) -> Dict[int, List[Dict]]:
-""""Получение реферального дерева""""
+        "Получение реферального дерева"
         referrals = {}
         
         async def get_level_referrals(parent_id: int, current_level: int):
@@ -1498,7 +1476,7 @@ async def handle_promo_messages(update: Update, context: ContextTypes.DEFAULT_TY
         return referrals
     
     async def get_referral_stats(self, user_id: int) -> Dict[str, Any]:
-""""Получение статистики по рефералам""""
+        "Получение статистики по рефералам"
         referrals_tree = await self.get_referrals_tree(user_id, 1, REFERRAL_LEVELS)
         
         total_referrals = 0
@@ -1514,17 +1492,17 @@ async def handle_promo_messages(update: Update, context: ContextTypes.DEFAULT_TY
             'total_referrals': total_referrals,
             'referrals_by_level': referrals_by_level,
             'referral_earnings': user.referral_earnings if user else 0,
-            'referral_code': user.referral_code if user else "",
+            'referral_code': user.referral_code if user else ",
         }
     
     async def get_all_users(self) -> List[User]:
-""""Получение всех пользователей""""
+        "Получение всех пользователей"
         async with self.get_connection() as conn:
             rows = await conn.fetch('SELECT * FROM users ORDER BY registered DESC')
             return [User.from_dict(dict(row)) for row in rows]
     
     async def get_top_users(self, limit: int = 10) -> List[User]:
-""""Получение топ пользователей по балансу""""
+        "Получение топ пользователей по балансу"
         async with self.get_connection() as conn:
             rows = await conn.fetch('''
                 SELECT * FROM users 
@@ -1535,7 +1513,7 @@ async def handle_promo_messages(update: Update, context: ContextTypes.DEFAULT_TY
             return [User.from_dict(dict(row)) for row in rows]
     
     async def delete_user(self, user_id: int):
-""""Удаление пользователя""""
+        "Удаление пользователя"
         async with self.get_connection() as conn:
             await conn.execute('DELETE FROM users WHERE user_id = $1', user_id)
             await conn.execute('DELETE FROM btc_farm WHERE user_id = $1', user_id)
@@ -1547,7 +1525,7 @@ btc_price = random.randint(10000, 150000)
 
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 def format_number(num: float) -> str:
-""""Форматирование чисел в удобный вид""""
+    "Форматирование чисел в удобный вид"
     if num >= 1_000_000_000_000:
         return f"{num/1_000_000_000_000:.2f}тккк"
     elif num >= 1_000_000_000:
@@ -1560,17 +1538,17 @@ def format_number(num: float) -> str:
         return str(int(num))
 
 def generate_referral_code() -> str:
-""""Генерация реферального кода""""
+    "Генерация реферального кода"
     characters = string.ascii_uppercase + string.digits
     return ''.join(secrets.choice(characters) for _ in range(6))
 
 def generate_promo_code() -> str:
-""""Генерация промокода""""
+    "Генерация промокода"
     characters = string.ascii_uppercase + string.digits
     return ''.join(secrets.choice(characters) for _ in range(PROMOCODE_LENGTH))
 
 async def calculate_gpu_income(user_id: int) -> float:
-""""Расчет дохода с фермы BTC""""
+    "Расчет дохода с фермы BTC"
     if not db:
         return 0.0
     
@@ -1584,7 +1562,7 @@ async def calculate_gpu_income(user_id: int) -> float:
         if farm.gpu_type in GPU_TYPES:
             total_income += GPU_TYPES[farm.gpu_type]["income_per_hour"] * farm.quantity
     
-"# Ищем последний сбор"
+# Ищем последний сбор
     last_collected = None
     for farm in farm_items:
         if farm.last_collected:
@@ -1599,7 +1577,7 @@ async def calculate_gpu_income(user_id: int) -> float:
     return 0.0
 
 def add_exp(user: User) -> bool:
-""""Добавление опыта и проверка повышения уровня""""
+    "Добавление опыта и проверка повышения уровня"
     if random.random() < 0.5:
         user.exp += 1
         exp_needed = LEVEL_EXP_REQUIREMENTS.get(user.level, 4 * user.level)
@@ -1610,7 +1588,7 @@ def add_exp(user: User) -> bool:
     return False
 
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-""""Проверка подписки на канал и чат""""
+    "Проверка подписки на канал и чат"
     try:
         channel_member = await context.bot.get_chat_member(
             chat_id=CHANNEL_USERNAME, 
@@ -1629,7 +1607,7 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
         return False
 
 async def check_ban(user_id: int) -> bool:
-""""Проверка забанен ли пользователь""""
+    "Проверка забанен ли пользователь"
     if not db:
         return False
     
@@ -1637,7 +1615,7 @@ async def check_ban(user_id: int) -> bool:
     return user.is_banned if user else False
 
 async def distribute_referral_bonus(user_id: int, amount: int, context: ContextTypes.DEFAULT_TYPE):
-""""Распределение реферального бонуса по уровням""""
+    "Распределение реферального бонуса по уровням"
     if not db or amount <= 0:
         return
     
@@ -1654,7 +1632,7 @@ async def distribute_referral_bonus(user_id: int, amount: int, context: ContextT
         if not referrer:
             break
         
-"# Начисляем процент от выигрыша"
+# Начисляем процент от выигрыша
         bonus_percent = REFERRAL_PERCENTS[level - 1]
         bonus_amount = int(amount * bonus_percent)
         
@@ -1663,14 +1641,14 @@ async def distribute_referral_bonus(user_id: int, amount: int, context: ContextT
             referrer.referral_earnings += bonus_amount
             await db.save_user(referrer)
             
-"# Записываем выплату"
+# Записываем выплату
             await db.add_referral_payment(user_id, referrer_id, bonus_amount, bonus_percent, level)
             
             try:
-"# Уведомляем реферера"
+# Уведомляем реферера
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"""
+                    text=f""
 "💰 *Реферальный доход!*"
 
 👤 От: {user.username or f'ID: {user_id}'}
@@ -1679,7 +1657,7 @@ async def distribute_referral_bonus(user_id: int, amount: int, context: ContextT
 🎯 Ваш процент: {bonus_percent*100}%
 💰 Ваш доход: {format_number(bonus_amount)}
 💳 Баланс: {format_number(referrer.balance)}
-""",
+"",
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as e:
@@ -1687,33 +1665,33 @@ async def distribute_referral_bonus(user_id: int, amount: int, context: ContextT
         
         current_user_id = referrer_id
         level += 1
-"# БЛОК 2/6: Основные команды и меню с промокодами и реферальной системой"
+# БЛОК 2/6: Основные команды и меню с промокодами и реферальной системой
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработчик команды /start""""
+    "Обработчик команды /start"
     user_id = update.effective_user.id
     username = update.effective_user.username
     
-"# Проверяем, есть ли реферальный параметр в команде"
+# Проверяем, есть ли реферальный параметр в команде
     ref_code = None
     if context.args and len(context.args) > 0:
         arg = context.args[0]
         if arg.startswith("ref"):
             ref_code = arg[3:]  # Убираем "ref" из начала
     
-"# Проверка бана"
+# Проверка бана
     if await check_ban(user_id):
         await update.message.reply_text("❌ Вы заблокированы в этом боте!")
         return
     
-    welcome_text = """
+    welcome_text = ""
 "🎰 *Добро Пожаловать в Vibe Bet!*"
 "Крути рулетку, рискуй в Краше, а также собирай свою ферму."
 
 "🎲 *Игры:* 🎲 Кости, ⚽ Футбол, 🎰 Рулетка, 💎 Алмазы, 💣 Мины, 📈 Краш, 🃏 Очко"
 "⛏️ *Заработок:* 👷 Работа, 🖥 Ферма BTC, 🎁 Бонус"
 "📊 *Системы:* 👥 Рефералы, 🎫 Промокоды, 🏦 Банк"
-"""
+    ""
     
     try:
         photo_url = "https://raw.githubusercontent.com/ваш-username/репозиторий/main/start_img.jpg"
@@ -1726,18 +1704,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка загрузки фото: {e}")
         await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
     
-"# Проверяем, зарегистрирован ли пользователь"
+# Проверяем, зарегистрирован ли пользователь
     user = await db.get_user(user_id)
     
     if not user:
         if ref_code:
-"# Сохраняем реферальный код в контексте"
+# Сохраняем реферальный код в контексте
             context.user_data["referral_code"] = ref_code
         
         keyboard = [[InlineKeyboardButton("📝 Зарегистрироваться", callback_data="register")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-""📝 Для начала игры необходимо зарегистрироваться!\n\n""
+"📝 Для начала игры необходимо зарегистрироваться!\n\n"
             f"🔗 Реферальная ссылка: `https://t.me/{(await context.bot.get_me()).username}?start=refYOURCODE`",
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
@@ -1746,20 +1724,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(update, context)
 
 async def register_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработчик регистрации""""
+    "Обработчик регистрации"
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
     username = query.from_user.username
     
-"# Проверяем, зарегистрирован ли уже"
+# Проверяем, зарегистрирован ли уже
     user = await db.get_user(user_id)
     if user:
         await query.edit_message_text("✅ Вы уже зарегистрированы!")
         return
     
-"# Проверка подписки"
+# Проверка подписки
     if not await check_subscription(user_id, context):
         keyboard = [
             [InlineKeyboardButton("✅ Подписаться на канал", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
@@ -1768,45 +1746,45 @@ async def register_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-""📢 Для регистрации необходимо подписаться на наш канал и чат!\n\n""
+"📢 Для регистрации необходимо подписаться на наш канал и чат!\n\n"
             f"Канал: {CHANNEL_USERNAME}\n"
             f"Чат: {CHAT_USERNAME}",
             reply_markup=reply_markup
         )
         return
     
-"# Создаем нового пользователя"
+# Создаем нового пользователя
     new_user = User(user_id=user_id, username=username)
     
-"# Генерируем реферальный код"
+# Генерируем реферальный код
     new_user.referral_code = generate_referral_code()
     
-"# Проверяем реферальный код из контекста"
+# Проверяем реферальный код из контекста
     ref_code = context.user_data.get("referral_code")
     if ref_code:
         referrer = await db.get_user_by_ref_code(ref_code)
         if referrer and referrer.user_id != user_id:
             new_user.referred_by = referrer.user_id
     
-"# Сохраняем пользователя"
+# Сохраняем пользователя
     await db.save_user(new_user)
     
-"# Если есть реферер, добавляем реферала"
+# Если есть реферер, добавляем реферала
     if new_user.referred_by:
         await db.add_referral(new_user.referred_by, user_id)
         
-"# Отправляем уведомление рефереру"
+# Отправляем уведомление рефереру
         try:
             await context.bot.send_message(
                 chat_id=new_user.referred_by,
-                text=f"""
+                text=f""
 "🎉 *НОВЫЙ РЕФЕРАЛ!*"
 
 👤 Новый пользователь: @{username if username else 'без username'}
 🆔 ID: `{user_id}`
 💰 Ваш бонус: {format_number(REFERRAL_BONUS)}
 👥 Всего рефералов: {referrer.total_referrals + 1 if referrer else 1}
-""",
+"",
                 parse_mode=ParseMode.MARKDOWN
             )
         except Exception as e:
@@ -1816,7 +1794,7 @@ async def register_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ref_bonus = REFERRAL_BONUS if new_user.referred_by else 0
     
     await query.edit_message_text(
-        f"""
+        f""
 "🎉 *РЕГИСТРАЦИЯ УСПЕШНА!*"
 
 "👤 Ваш профиль создан!"
@@ -1833,12 +1811,12 @@ async def register_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "/work - Работать"
 "/ref - Реферальная система"
 "/promo - Активировать промокод"
-""",
+"",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def check_subscription_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Проверка подписки""""
+    "Проверка подписки"
     query = update.callback_query
     await query.answer()
     
@@ -1850,7 +1828,7 @@ async def check_subscription_callback(update: Update, context: ContextTypes.DEFA
         await query.answer("❌ Вы еще не подписались на канал и чат!", show_alert=True)
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать главное меню""""
+    "Показать главное меню"
     user_id = update.effective_user.id
     
     user = await db.get_user(user_id)
@@ -1862,7 +1840,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Сначала зарегистрируйтесь через /start")
             return
     
-"# Проверка бана"
+# Проверка бана
     if user.is_banned:
         await update.message.reply_text("❌ Вы заблокированы в этом боте!")
         return
@@ -1886,7 +1864,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if update.callback_query:
         await update.callback_query.edit_message_text(
-""🏠 *Главное меню Vibe Bet*\n\n""
+"🏠 *Главное меню Vibe Bet*\n\n"
             f"💰 Баланс: *{format_number(user.balance)}*\n"
             f"🏦 В банке: *{format_number(user.bank)}*\n"
             f"₿ BTC: *{user.btc:.4f}*",
@@ -1895,7 +1873,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text(
-""🏠 *Главное меню Vibe Bet*\n\n""
+"🏠 *Главное меню Vibe Bet*\n\n"
             f"💰 Баланс: *{format_number(user.balance)}*\n"
             f"🏦 В банке: *{format_number(user.bank)}*\n"
             f"₿ BTC: *{user.btc:.4f}*",
@@ -1904,7 +1882,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать профиль пользователя""""
+    "Показать профиль пользователя"
     query = update.callback_query
     await query.answer()
     
@@ -1915,13 +1893,13 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Расчет общего выигрыша"
+# Расчет общего выигрыша
     total_won = user.balance + user.bank - 10000 + user.referral_earnings
     
-"# Получаем статистику рефералов"
+# Получаем статистику рефералов
     ref_stats = await db.get_referral_stats(user_id)
     
-    profile_text = f"""
+    profile_text = f""
 "👤 *ПРОФИЛЬ ИГРОКА*"
 
 🆔 ID: `{user.user_id}`
@@ -1942,7 +1920,7 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔗 Код: `{user.referral_code}`
 
 📈 Общий выигрыш: *{format_number(total_won)}*
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("📊 Подробная статистика", callback_data="stats_detailed")],
@@ -1958,7 +1936,7 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def show_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Подробная статистика""""
+    "Подробная статистика"
     query = update.callback_query
     await query.answer()
     
@@ -1969,21 +1947,21 @@ async def show_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем дерево рефералов"
+# Получаем дерево рефералов
     referrals_tree = await db.get_referrals_tree(user_id, 1, REFERRAL_LEVELS)
     
-    ref_details = ""
+    ref_details = "
     for level, users in referrals_tree.items():
         ref_details += f"\n📊 *Уровень {level}:* {len(users)} чел."
         if users:
             total_level_balance = sum(u['balance'] for u in users)
             ref_details += f" (общий баланс: {format_number(total_level_balance)})"
     
-"# Статистика по играм"
+# Статистика по играм
     total_games = user.wins + user.loses
     win_rate = (user.wins / total_games * 100) if total_games > 0 else 0
     
-    detailed_text = f"""
+    detailed_text = f""
 "📊 *ДЕТАЛЬНАЯ СТАТИСТИКА*"
 
 "🎮 *Игровая статистика:*"
@@ -2002,7 +1980,7 @@ async def show_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYPE
 🏆 Уровень: *{user.level}*
 ⭐ Опыт: *{user.exp}*
 📅 Играет: *{(datetime.datetime.now() - user.registered).days} дней*
-"""
+    ""
     
     keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="profile")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2014,7 +1992,7 @@ async def show_stats_detailed(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def bonus_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню бонусов""""
+    "Меню бонусов"
     query = update.callback_query
     await query.answer()
     
@@ -2027,7 +2005,7 @@ async def bonus_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     current_time = datetime.datetime.now()
     can_claim = True
-    time_left = ""
+    time_left = "
     
     if user.last_bonus:
         time_since = current_time - user.last_bonus
@@ -2046,7 +2024,7 @@ async def bonus_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    bonus_text = f"""
+    bonus_text = f""
 "🎁 *ЕЖЕДНЕВНЫЙ БОНУС*"
 
 {f'⏳ Доступно через: *{time_left}*' if not can_claim else '✅ Бонус доступен для получения!'}
@@ -2062,7 +2040,7 @@ async def bonus_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "4️⃣ Уровень: 125,000"
 "5️⃣ Уровень: 150,000"
 {f'6️⃣+ Уровень: {format_number(bonus_amount)}' if user.level > 5 else ''}
-"""
+    ""
     
     await query.edit_message_text(
         bonus_text,
@@ -2071,7 +2049,7 @@ async def bonus_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def claim_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Получить ежедневный бонус""""
+    "Получить ежедневный бонус"
     query = update.callback_query
     await query.answer()
     
@@ -2084,7 +2062,7 @@ async def claim_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     current_time = datetime.datetime.now()
     
-"# Проверяем, можно ли получить бонус"
+# Проверяем, можно ли получить бонус
     if user.last_bonus:
         time_since = current_time - user.last_bonus
         if time_since.total_seconds() < 86400:
@@ -2093,16 +2071,16 @@ async def claim_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     bonus_amount = LEVEL_BONUS.get(user.level, 50000 + (user.level - 1) * 25000)
     
-"# Начисляем бонус"
+# Начисляем бонус
     user.balance += bonus_amount
     user.last_bonus = current_time
     
-"# Добавляем опыт"
+# Добавляем опыт
     level_up = add_exp(user)
     
     await db.save_user(user)
     
-    result_text = f"""
+    result_text = f""
 "🎁 *БОНУС ПОЛУЧЕН!*"
 
 💰 Сумма: *{format_number(bonus_amount)}*
@@ -2111,7 +2089,7 @@ async def claim_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ⭐ Опыт: {user.exp}/{LEVEL_EXP_REQUIREMENTS.get(user.level, 4*user.level)}
 
 "⏳ Следующий бонус через 24 часа"
-"""
+    ""
     
     if level_up:
         result_text += f"\n🎉 *ПОЗДРАВЛЯЕМ!*\nВы достигли {user.level} уровня!"
@@ -2126,7 +2104,7 @@ async def claim_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню реферальной системы""""
+    "Меню реферальной системы"
     query = update.callback_query
     await query.answer()
     
@@ -2137,17 +2115,17 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем статистику рефералов"
+# Получаем статистику рефералов
     ref_stats = await db.get_referral_stats(user_id)
     
-"# Формируем текст с информацией о рефералах по уровням"
-    ref_details = ""
+# Формируем текст с информацией о рефералах по уровням
+    ref_details = "
     if ref_stats['referrals_by_level']:
         for level, count in ref_stats['referrals_by_level'].items():
             percent = REFERRAL_PERCENTS[level-1] * 100
             ref_details += f"\n📊 *Уровень {level}:* {count} чел. ({percent}% от их доходов)"
     
-    referral_text = f"""
+    referral_text = f""
 "👥 *РЕФЕРАЛЬНАЯ СИСТЕМА*"
 
 "🔗 Ваш реферальный код:"
@@ -2171,7 +2149,7 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "2. Он должен нажать на ссылку и зарегистрироваться"
 3. Вы получите {format_number(REFERRAL_BONUS)} сразу
 "4. Вы получаете % от всех его выигрышей!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("📊 Мои рефералы", callback_data="my_referrals")],
@@ -2189,7 +2167,7 @@ async def referral_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def my_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Мои рефералы""""
+    "Мои рефералы"
     query = update.callback_query
     await query.answer()
     
@@ -2200,13 +2178,13 @@ async def my_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем дерево рефералов"
+# Получаем дерево рефералов
     referrals_tree = await db.get_referrals_tree(user_id, 1, REFERRAL_LEVELS)
     
     if not referrals_tree:
         await query.edit_message_text(
-""📭 У вас еще нет рефералов.\n""
-""Приглашайте друзей по своей реферальной ссылке!","
+"📭 У вас еще нет рефералов.\n"
+"Приглашайте друзей по своей реферальной ссылке!","
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -2227,16 +2205,16 @@ async def my_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             referrals_text += "\n"
     
-"# Подсчет общей статистики"
+# Подсчет общей статистики
     total_refs = sum(len(users) for users in referrals_tree.values())
     total_balance = sum(ref['balance'] for level_users in referrals_tree.values() for ref in level_users)
     
-    referrals_text += f"""
+    referrals_text += f""
 "📈 *ОБЩАЯ СТАТИСТИКА:*"
 👥 Всего рефералов: {total_refs}
 💰 Общий баланс рефералов: {format_number(total_balance)}
 💸 Ваш процент: {REFERRAL_PERCENTS[0]*100}% от 1 ур., {REFERRAL_PERCENTS[1]*100}% от 2 ур., {REFERRAL_PERCENTS[2]*100}% от 3 ур.
-"""
+    ""
     
     keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="referral_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2248,7 +2226,7 @@ async def my_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def copy_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Копирование реферальной ссылки""""
+    "Копирование реферальной ссылки"
     query = update.callback_query
     await query.answer()
     
@@ -2262,18 +2240,18 @@ async def copy_ref_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = (await context.bot.get_me()).username
     ref_link = f"https://t.me/{bot_username}?start=ref{user.referral_code}"
     
-"# В реальном боте можно использовать метод copy_text, но для простоты покажем ссылку"
+# В реальном боте можно использовать метод copy_text, но для простоты покажем ссылку
     await query.edit_message_text(
-"f"🔗 *ВАША РЕФЕРАЛЬНАЯ ССЫЛКА*\n\n""
+f"🔗 *ВАША РЕФЕРАЛЬНАЯ ССЫЛКА*\n\n"
         f"`{ref_link}`\n\n"
-"f"📋 *Код для копирования:*\n""
+f"📋 *Код для копирования:*\n"
         f"`{user.referral_code}`\n\n"
-"f"Отправьте эту ссылку друзьям, чтобы получать бонусы!","
+f"Отправьте эту ссылку друзьям, чтобы получать бонусы!","
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню промокодов""""
+    "Меню промокодов"
     query = update.callback_query
     await query.answer()
     
@@ -2284,7 +2262,7 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    promo_text = f"""
+    promo_text = f""
 "🎫 *ПРОМОКОДЫ*"
 
 💰 Ваш баланс: {format_number(user.balance)}
@@ -2305,7 +2283,7 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- При регистрации: 10,000"
 - За каждого реферала: {format_number(REFERRAL_BONUS)}
 - Ежедневный бонус: до {format_number(LEVEL_BONUS.get(5, 150000))}
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("🎫 Активировать промокод", callback_data="activate_promo")],
@@ -2325,7 +2303,7 @@ async def promo_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def activate_promo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Активация промокода через callback""""
+    "Активация промокода через callback"
     query = update.callback_query
     await query.answer()
     
@@ -2337,17 +2315,17 @@ async def activate_promo_callback(update: Update, context: ContextTypes.DEFAULT_
         return
     
     await query.edit_message_text(
-""🎫 *АКТИВАЦИЯ ПРОМОКОДА*\n\n""
-""Введите промокод:\n""
-""Например: `SUMMER2024` или `WELCOME100`","
+"🎫 *АКТИВАЦИЯ ПРОМОКОДА*\n\n"
+"Введите промокод:\n"
+"Например: `SUMMER2024` или `WELCOME100`","
         parse_mode=ParseMode.MARKDOWN
     )
     
-"# Устанавливаем состояние ожидания промокода"
+# Устанавливаем состояние ожидания промокода
     context.user_data["awaiting_promo"] = True
 
 async def activate_promo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Активация промокода через команду""""
+    "Активация промокода через команду"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -2357,9 +2335,9 @@ async def activate_promo_command(update: Update, context: ContextTypes.DEFAULT_T
     
     if not context.args:
         await update.message.reply_text(
-""🎫 *Использование:*\n""
+"🎫 *Использование:*\n"
             "`/promo [код]`\n\n"
-""Пример: `/promo SUMMER2024`","
+"Пример: `/promo SUMMER2024`","
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -2368,7 +2346,7 @@ async def activate_promo_command(update: Update, context: ContextTypes.DEFAULT_T
     await process_promo_code(update, context, promo_code)
 
 async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE, promo_code: str):
-""""Обработка промокода""""
+    "Обработка промокода"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -2377,11 +2355,11 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
             await update.message.reply_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Проверяем промокод"
+# Проверяем промокод
     success, message, bonus_data = await db.use_promo_code(promo_code, user_id)
     
     if success:
-"# Начисляем бонус"
+# Начисляем бонус
         bonus_type = bonus_data["type"]
         bonus_value = bonus_data["value"]
         
@@ -2402,7 +2380,7 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
             result_text += f"⭐ Получено: *{bonus_value} опыта*\n"
             result_text += f"⭐ Новый опыт: *{user.exp}/{LEVEL_EXP_REQUIREMENTS.get(user.level, 4*user.level)}*"
             
-"# Проверяем повышение уровня"
+# Проверяем повышение уровня
             exp_needed = LEVEL_EXP_REQUIREMENTS.get(user.level, 4 * user.level)
             if user.exp >= exp_needed:
                 user.level += 1
@@ -2431,7 +2409,7 @@ async def process_promo_code(update: Update, context: ContextTypes.DEFAULT_TYPE,
         )
 
 async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""История использованных промокодов""""
+    "История использованных промокодов"
     query = update.callback_query
     await query.answer()
     
@@ -2442,14 +2420,14 @@ async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем историю промокодов"
+# Получаем историю промокодов
     promo_uses = await db.get_user_promo_uses(user_id)
     
     if not promo_uses:
         await query.edit_message_text(
-""📭 *ИСТОРИЯ ПРОМОКОДОВ*\n\n""
-""Вы еще не использовали ни одного промокода.\n""
-""Следите за обновлениями и участвуйте в ивентах!","
+"📭 *ИСТОРИЯ ПРОМОКОДОВ*\n\n"
+"Вы еще не использовали ни одного промокода.\n"
+"Следите за обновлениями и участвуйте в ивентах!","
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -2476,7 +2454,7 @@ async def my_promocodes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Создание промокода (админ)"""
+    "Создание промокода (админ)"
     query = update.callback_query
     await query.answer()
     
@@ -2497,18 +2475,18 @@ async def create_promo_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(
-""🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n""
-""Выберите тип промокода:","
+"🛠 *СОЗДАНИЕ ПРОМОКОДА*\n\n"
+"Выберите тип промокода:","
         reply_markup=reply_markup,
         parse_mode=ParseMode.MARKDOWN
 )
-"# БЛОК 3/6: Игры и основной игровой функционал"
+# БЛОК 3/6: Игры и основной игровой функционал
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать помощь по всем командам бота""""
+    "Показать помощь по всем командам бота"
     user_id = update.effective_user.id
     
-    help_text = """
+    help_text = ""
 "🎮 *VIBE BET - ПОЛНЫЙ ГАЙД ПО КОМАНДАМ И ВОЗМОЖНОСТЯМ* 🎮"
 
 "📋 *ОСНОВНЫЕ КОМАНДЫ:*"
@@ -2619,18 +2597,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "5. Участвуйте в ивентах и акциях"
 
 "Удачи в игре! 🍀"
-"""
+    ""
     
     try:
         await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
-"# Если сообщение слишком длинное, разбиваем на части"
+# Если сообщение слишком длинное, разбиваем на части
         parts = [help_text[i:i+4000] for i in range(0, len(help_text), 4000)]
         for part in parts:
             await update.message.reply_text(part, parse_mode=ParseMode.MARKDOWN)
 
 async def show_games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать меню игр""""
+    "Показать меню игр"
     query = update.callback_query
     await query.answer()
     
@@ -2641,7 +2619,7 @@ async def show_games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    games_text = """
+    games_text = ""
 "🎮 *ВЫБЕРИТЕ ИГРУ*"
 
 "Все игры с реальными ставками и высокими коэффициентами!"
@@ -2657,7 +2635,7 @@ async def show_games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "💰 Минимальная ставка: *100*"
 "📊 Шансы и коэффициенты указаны в каждой игре"
 "🎯 Опыт начисляется за любые игры"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("🎰 Рулетка", callback_data="roulette_menu"),
@@ -2680,7 +2658,7 @@ async def show_games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def games_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика игр пользователя""""
+    "Статистика игр пользователя"
     query = update.callback_query
     await query.answer()
     
@@ -2694,7 +2672,7 @@ async def games_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_games = user.wins + user.loses
     win_rate = (user.wins / total_games * 100) if total_games > 0 else 0
     
-    stats_text = f"""
+    stats_text = f""
 "📊 *ВАША ИГРОВАЯ СТАТИСТИКА*"
 
 🎮 Всего игр: *{total_games}*
@@ -2713,7 +2691,7 @@ async def games_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "🎯 *РЕКОМЕНДАЦИИ:*"
 {f'📉 Винрейт ниже 50% - попробуйте игры с более высокими шансами' if win_rate < 50 else '📈 Отличный винрейт! Продолжайте в том же духе!'}
 {f'💡 Совет: Делайте ставки по 10% от баланса' if user.balance > 1000 else '💡 Совет: Начните с минимальных ставок'}
-"""
+    ""
     
     keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2725,7 +2703,7 @@ async def games_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def roulette_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню рулетки""""
+    "Меню рулетки"
     query = update.callback_query
     await query.answer()
     
@@ -2736,7 +2714,7 @@ async def roulette_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    roulette_text = f"""
+    roulette_text = f""
 "🎰 *РУЛЕТКА*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -2757,7 +2735,7 @@ async def roulette_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Красное/Черное - самые безопасные ставки"
 "- Конкретные числа - высокий риск, высокий потенциал"
 "- Играйте ответственно!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("🔴 Красное (x2)", callback_data="roulette_red"),
@@ -2781,12 +2759,12 @@ async def roulette_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def roulette_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика рулетки""""
+    "Статистика рулетки"
     query = update.callback_query
     await query.answer()
     
     await query.edit_message_text(
-        """
+        ""
 "📊 *СТАТИСТИКА РУЛЕТКИ*"
 
 "🎰 *ШАНСЫ ВЫИГРЫША:*"
@@ -2808,12 +2786,12 @@ async def roulette_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "4. Избегайте "систем" и "стратегий", они не работают"
 
 "⚠️ *ПОМНИТЕ:* Рулетка - игра удачи!"
-        """,
+        "",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def roulette_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка выбора ставки в рулетке""""
+    "Обработка выбора ставки в рулетке"
     query = update.callback_query
     await query.answer()
     
@@ -2827,7 +2805,7 @@ async def roulette_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bet_type = query.data
     context.user_data["roulette_type"] = bet_type
     
-"# Определяем тип ставки для отображения"
+# Определяем тип ставки для отображения
     bet_names = {
         "roulette_red": "🔴 Красное (x2)",
         "roulette_black": "⚫ Черное (x2)", 
@@ -2842,7 +2820,7 @@ async def roulette_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bet_name = bet_names.get(bet_type, "неизвестная ставка")
     
     await query.edit_message_text(
-"f"🎰 *РУЛЕТКА*\n\n""
+f"🎰 *РУЛЕТКА*\n\n"
         f"Вы выбрали: *{bet_name}*\n"
         f"Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите сумму ставки (мин. 100):",
@@ -2850,7 +2828,7 @@ async def roulette_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка ставки в рулетке""""
+    "Обработка ставки в рулетке"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -2875,19 +2853,19 @@ async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ошибка! Начните заново.")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     
-"# Крутим рулетку"
+# Крутим рулетку
     result_number = random.randint(0, 36)
     
-"# Определяем свойства выпавшего числа"
+# Определяем свойства выпавшего числа
     is_red = result_number in [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
     is_black = result_number in [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35]
     is_even = result_number % 2 == 0 and result_number != 0
     is_odd = result_number % 2 == 1
     
-"# Определяем цвет для отображения"
+# Определяем цвет для отображения
     if result_number == 0:
         color = "🟢"
         color_text = "зеленое"
@@ -2898,7 +2876,7 @@ async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
         color = "⚫"
         color_text = "черное"
     
-"# Проверяем выигрыш"
+# Проверяем выигрыш
     won = False
     multiplier = 0
     
@@ -2924,7 +2902,7 @@ async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
         won = True
         multiplier = 3
     elif bet_type == "roulette_number":
-"# Для конкретного числа генерируем случайное число для ставки"
+# Для конкретного числа генерируем случайное число для ставки
         player_bet_number = random.randint(0, 36)
         if result_number == player_bet_number:
             won = True
@@ -2935,27 +2913,27 @@ async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.balance += win_amount
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount - bet_amount, context)
         
-        result_text = f"""
+        result_text = f""
 "🎰 *РУЛЕТКА - ПОБЕДА!* 🎉"
 
 💸 Ваша ставка: *{format_number(bet_amount)}*
 🎯 Выпало: {result_number} {color} ({color_text})
 💰 Выигрыш: *{format_number(win_amount)}* (x{multiplier})
 💳 Новый баланс: *{format_number(user.balance)}*
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
         
     else:
         user.loses += 1
-        result_text = f"""
+        result_text = f""
 "🎰 *РУЛЕТКА - ПРОИГРЫШ* 😔"
 
 💸 Ваша ставка: *{format_number(bet_amount)}*
@@ -2963,7 +2941,7 @@ async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "💪 Не расстраивайтесь! Удача будет на вашей стороне в следующий раз!"
-"""
+    ""
     
     await db.save_user(user)
     
@@ -2980,7 +2958,7 @@ async def process_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def football_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню футбола""""
+    "Меню футбола"
     query = update.callback_query
     await query.answer()
     
@@ -2991,7 +2969,7 @@ async def football_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    football_text = f"""
+    football_text = f""
 "⚽ *ФУТБОЛ*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -3012,7 +2990,7 @@ async def football_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Игра основана на удаче!"
 
 "⚠️ *ВАЖНО:* Игра имитирует реальный футбол, результаты случайны."
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("⚽ ГОЛ (x1.8)", callback_data="football_goal"),
@@ -3030,12 +3008,12 @@ async def football_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def football_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика футбола""""
+    "Статистика футбола"
     query = update.callback_query
     await query.answer()
     
     await query.edit_message_text(
-        """
+        ""
 "📊 *СТАТИСТИКА ФУТБОЛА*"
 
 "⚽ *РЕАЛЬНЫЕ СТАТИСТИКИ:*"
@@ -3064,12 +3042,12 @@ async def football_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Вероятность гола со штрафного: 6%"
 
 "🎮 *В НАШЕЙ ИГРЕ:* результаты генерируются случайно, но с учетом реальной статистики!"
-        """,
+        "",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def football_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка выбора ставки в футболе""""
+    "Обработка выбора ставки в футболе"
     query = update.callback_query
     await query.answer()
     
@@ -3086,7 +3064,7 @@ async def football_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bet_name = "⚽ ГОЛ (x1.8)" if bet_type == "football_goal" else "❌ МИМО (x2.2)"
     
     await query.edit_message_text(
-"f"⚽ *ФУТБОЛ*\n\n""
+f"⚽ *ФУТБОЛ*\n\n"
         f"Вы выбрали: *{bet_name}*\n"
         f"Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите сумму ставки (мин. 100):",
@@ -3094,7 +3072,7 @@ async def football_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка ставки в футболе""""
+    "Обработка ставки в футболе"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -3119,10 +3097,10 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ошибка! Начните заново.")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     
-"# Создаем анимацию удара"
+# Создаем анимацию удара
     message = await update.message.reply_text("⚽ Игрок готовится к удару...")
     await asyncio.sleep(1)
     await message.edit_text("⚽ Игрок разбегается...")
@@ -3133,7 +3111,7 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Определяем результат (55% гол, 45% мимо)
     is_goal = random.random() < 0.55
     
-"# Проверяем выигрыш"
+# Проверяем выигрыш
     won = False
     multiplier = 0
     
@@ -3149,14 +3127,14 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.balance += win_amount
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount - bet_amount, context)
         
         result_emoji = "⚽🥅 *ГОООООЛ!!!*" if is_goal else "❌ *МИМО!*"
-        result_text = f"""
+        result_text = f""
 "⚽ *ФУТБОЛ - ПОБЕДА!* 🎉"
 
 {result_emoji}
@@ -3164,7 +3142,7 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎯 Вы ставили на: {"ГОЛ" if bet_type == "football_goal" else "МИМО"}
 💰 Выигрыш: *{format_number(win_amount)}* (x{multiplier})
 💳 Новый баланс: *{format_number(user.balance)}*
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
@@ -3172,7 +3150,7 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         user.loses += 1
         result_emoji = "⚽🥅 *ГОООООЛ!!!*" if is_goal else "❌ *МИМО!*"
-        result_text = f"""
+        result_text = f""
 "⚽ *ФУТБОЛ - ПРОИГРЫШ* 😔"
 
 {result_emoji}
@@ -3181,7 +3159,7 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "⚽ Удачи в следующем ударе!"
-"""
+    ""
     
     await db.save_user(user)
     
@@ -3198,7 +3176,7 @@ async def process_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def dice_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню костей""""
+    "Меню костей"
     query = update.callback_query
     await query.answer()
     
@@ -3209,7 +3187,7 @@ async def dice_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    dice_text = f"""
+    dice_text = f""
 "🎲 *КОСТИ*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -3231,7 +3209,7 @@ async def dice_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - Больше 7: 41.7% (15/36)
 
 "🎲 *ИНТЕРЕСНЫЙ ФАКТ:* Сумма 7 - самая вероятная при броске двух костей!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("🎲 МЕНЬШЕ 7 (x2.2)", callback_data="dice_less"),
@@ -3250,12 +3228,12 @@ async def dice_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def dice_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика костей""""
+    "Статистика костей"
     query = update.callback_query
     await query.answer()
     
-"# Таблица вероятностей"
-    probabilities = """
+# Таблица вероятностей
+    probabilities = ""
 "📊 *ТАБЛИЦА ВЕРОЯТНОСТЕЙ КОСТЕЙ*"
 
 "🎲 *Сумма двух кубиков:*"
@@ -3291,7 +3269,7 @@ async def dice_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "1. Ставка на 7 имеет лучшее математическое ожидание"
 "2. Не играйте все деньги на одну ставку"
 "3. Кости - игра удачи, играйте ответственно!"
-"""
+    ""
     
     await query.edit_message_text(
         probabilities,
@@ -3299,7 +3277,7 @@ async def dice_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def dice_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка выбора ставки в костях""""
+    "Обработка выбора ставки в костях"
     query = update.callback_query
     await query.answer()
     
@@ -3322,7 +3300,7 @@ async def dice_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bet_name = bet_names.get(bet_type, "неизвестная ставка")
     
     await query.edit_message_text(
-"f"🎲 *КОСТИ*\n\n""
+f"🎲 *КОСТИ*\n\n"
         f"Вы выбрали: *{bet_name}*\n"
         f"Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите сумму ставки (мин. 100):",
@@ -3330,7 +3308,7 @@ async def dice_bet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка ставки в костях""""
+    "Обработка ставки в костях"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -3355,10 +3333,10 @@ async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ошибка! Начните заново.")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     
-"# Создаем анимацию броска"
+# Создаем анимацию броска
     message = await update.message.reply_text("🎲 Кости крутятся...")
     await asyncio.sleep(1)
     await message.edit_text("🎲🎲 Кости летят...")
@@ -3366,12 +3344,12 @@ async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await message.edit_text("🎲🎲🎲 Кости падают...")
     await asyncio.sleep(1)
     
-"# Бросаем кости"
+# Бросаем кости
     dice1 = random.randint(1, 6)
     dice2 = random.randint(1, 6)
     total = dice1 + dice2
     
-"# Проверяем выигрыш"
+# Проверяем выигрыш
     won = False
     multiplier = 0
     
@@ -3390,13 +3368,13 @@ async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.balance += win_amount
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount - bet_amount, context)
         
-        result_text = f"""
+        result_text = f""
 "🎲 *КОСТИ - ПОБЕДА!* 🎉"
 
 🎲 Выпало: *{dice1} + {dice2} = {total}*
@@ -3404,14 +3382,14 @@ async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎯 Вы ставили на: {"МЕНЬШЕ 7" if bet_type == "dice_less" else "РАВНО 7" if bet_type == "dice_equal" else "БОЛЬШЕ 7"}
 💰 Выигрыш: *{format_number(win_amount)}* (x{multiplier})
 💳 Новый баланс: *{format_number(user.balance)}*
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
         
     else:
         user.loses += 1
-        result_text = f"""
+        result_text = f""
 "🎲 *КОСТИ - ПРОИГРЫШ* 😔"
 
 🎲 Выпало: *{dice1} + {dice2} = {total}*
@@ -3420,7 +3398,7 @@ async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "🎲 Удачи в следующем броске!"
-"""
+    ""
     
     await db.save_user(user)
     
@@ -3435,10 +3413,10 @@ async def process_dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup,
         parse_mode=ParseMode.MARKDOWN
     )
-"# БЛОК 4/6: Остальные игры и финансовые системы"
+# БЛОК 4/6: Остальные игры и финансовые системы
 
 async def crash_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню игры Краш""""
+    "Меню игры Краш"
     query = update.callback_query
     await query.answer()
     
@@ -3449,7 +3427,7 @@ async def crash_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    crash_text = f"""
+    crash_text = f""
 "📈 *КРАШ ИГРА*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -3473,7 +3451,7 @@ async def crash_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Не жадничайте! График может упасть в любой момент"
 
 "⚠️ *ВАЖНО:* Это игра на удачу и скорость реакции!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("📈 Начать игру Краш", callback_data="crash_start")],
@@ -3490,11 +3468,11 @@ async def crash_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def crash_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика игры Краш""""
+    "Статистика игры Краш"
     query = update.callback_query
     await query.answer()
     
-    stats_text = """
+    stats_text = ""
 "📊 *СТАТИСТИКА ИГРЫ КРАШ*"
 
 "📈 *ВЕРОЯТНОСТЬ КРАХА:*"
@@ -3522,7 +3500,7 @@ async def crash_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - Самый быстрый вывод: 1.01x (через 0.5 сек)
 
 "⚠️ *ПОМНИТЕ:* Краш - одна из самых рискованных игр!"
-"""
+    ""
     
     await query.edit_message_text(
         stats_text,
@@ -3530,7 +3508,7 @@ async def crash_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def crash_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Начать игру Краш""""
+    "Начать игру Краш"
     query = update.callback_query
     await query.answer()
     
@@ -3542,7 +3520,7 @@ async def crash_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-"f"📈 *КРАШ ИГРА*\n\n""
+f"📈 *КРАШ ИГРА*\n\n"
         f"💰 Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите сумму ставки (мин. 100):",
         parse_mode=ParseMode.MARKDOWN
@@ -3550,7 +3528,7 @@ async def crash_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["awaiting_crash_bet"] = True
 
 async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка игры Краш""""
+    "Обработка игры Краш"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -3570,7 +3548,7 @@ async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Введите корректное число!")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     await db.save_user(user)
     
@@ -3579,7 +3557,7 @@ async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     while random.random() < 0.95 and crash_point < 100:
         crash_point += random.uniform(0.01, 0.5)
     
-"# Создаем сообщение с анимацией"
+# Создаем сообщение с анимацией
     message = await update.message.reply_text("📈 *ГРАФИК НАЧИНАЕТ РОСТ...*\n\nТекущий множитель: 1.00x")
     
     current_multiplier = 1.00
@@ -3587,53 +3565,53 @@ async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_cashed_out = False
     cashout_multiplier = 0
     
-"# Анимация роста графика"
+# Анимация роста графика
     while current_multiplier < crash_point and steps < 50:
         await asyncio.sleep(0.3)
         steps += 1
         
-"# Генерируем рост"
+# Генерируем рост
         increment = random.uniform(0.01, 0.2)
         current_multiplier += increment
         
         # Проверяем, не нажал ли пользователь кнопку вывода (эмуляция)
-"# В реальном боте здесь будут callback кнопки"
+# В реальном боте здесь будут callback кнопки
         if not user_cashed_out and random.random() < 0.05:
-"# Эмулируем решение пользователя вывести"
+# Эмулируем решение пользователя вывести
             if current_multiplier > 1.1:
                 user_cashed_out = True
                 cashout_multiplier = current_multiplier
         
-"# Если текущий множитель достиг краха"
+# Если текущий множитель достиг краха
         if current_multiplier >= crash_point:
             break
         
         try:
             await message.edit_text(
-"f"📈 *ГРАФИК РАСТЕТ...*\n\n""
+f"📈 *ГРАФИК РАСТЕТ...*\n\n"
                 f"Текущий множитель: *{current_multiplier:.2f}x*\n"
                 f"Ваша ставка: *{format_number(bet_amount)}*\n"
                 f"Потенциальный выигрыш: *{format_number(int(bet_amount * current_multiplier))}*\n\n"
-"f"⏰ Успейте вывести до краха!","
+f"⏰ Успейте вывести до краха!","
                 parse_mode=ParseMode.MARKDOWN
             )
         except:
             pass
     
-"# Завершение игры"
+# Завершение игры
     if user_cashed_out and cashout_multiplier > 0:
-"# Пользователь успел вывести"
+# Пользователь успел вывести
         win_amount = int(bet_amount * cashout_multiplier)
         user.balance += win_amount
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount - bet_amount, context)
         
-        result_text = f"""
+        result_text = f""
 "📈 *КРАШ - ВЫИГРЫШ!* 🎉"
 
 ✅ Вы успели вывести на: *{cashout_multiplier:.2f}x*
@@ -3643,15 +3621,15 @@ async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ⏰ Точка краха была: *{crash_point:.2f}x*
 📊 Вы вывели за *{steps * 0.3:.1f}* секунд
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
         
     else:
-"# Пользователь не успел вывести"
+# Пользователь не успел вывести
         user.loses += 1
-        result_text = f"""
+        result_text = f""
 "📉 *КРАШ - ПРОИГРЫШ!* 😔"
 
 "❌ Вы не успели вывести!"
@@ -3661,7 +3639,7 @@ async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "💪 В следующий раз повезет больше!"
-"""
+    ""
     
     await db.save_user(user)
     
@@ -3678,7 +3656,7 @@ async def process_crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def mines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню игры Мины""""
+    "Меню игры Мины"
     query = update.callback_query
     await query.answer()
     
@@ -3689,7 +3667,7 @@ async def mines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    mines_text = f"""
+    mines_text = f""
 "💣 *МИНЫ*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -3714,7 +3692,7 @@ async def mines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - 22 ячейки (все): 24.0x
 
 "⚠️ *СТРАТЕГИЯ:* Открывайте ячейки осторожно, не рискуйте всем!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("💣 Начать игру Мины", callback_data="mines_start")],
@@ -3731,11 +3709,11 @@ async def mines_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def mines_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика игры Мины""""
+    "Статистика игры Мины"
     query = update.callback_query
     await query.answer()
     
-    stats_text = """
+    stats_text = ""
 "📊 *СТАТИСТИКА ИГРЫ МИНЫ*"
 
 "💣 *ВЕРОЯТНОСТИ:*"
@@ -3759,7 +3737,7 @@ async def mines_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Мины распределяются случайно"
 
 "💡 *СОВЕТ:* Выводите, когда множитель вас устраивает, не жадничайте!"
-"""
+    ""
     
     await query.edit_message_text(
         stats_text,
@@ -3767,7 +3745,7 @@ async def mines_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def mines_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Начать игру Мины""""
+    "Начать игру Мины"
     query = update.callback_query
     await query.answer()
     
@@ -3779,7 +3757,7 @@ async def mines_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-"f"💣 *МИНЫ*\n\n""
+f"💣 *МИНЫ*\n\n"
         f"💰 Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите сумму ставки (мин. 100):",
         parse_mode=ParseMode.MARKDOWN
@@ -3793,7 +3771,7 @@ async def mines_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
 async def process_mines_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка начала игры Мины""""
+    "Обработка начала игры Мины"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -3813,7 +3791,7 @@ async def process_mines_start(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ Введите корректное число!")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     await db.save_user(user)
     
@@ -3829,7 +3807,7 @@ async def process_mines_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     await show_mines_game(update, context)
 
 async def show_mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать игровое поле Мины""""
+    "Показать игровое поле Мины"
     game_data = context.user_data.get("mines_game")
     if not game_data:
         await update.message.reply_text("❌ Ошибка игры!")
@@ -3837,7 +3815,7 @@ async def show_mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_id = update.effective_user.id
     
-"# Создаем клавиатуру с полем 5x5"
+# Создаем клавиатуру с полем 5x5
     keyboard = []
     for row in range(5):
         row_buttons = []
@@ -3853,7 +3831,7 @@ async def show_mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row_buttons.append(InlineKeyboardButton(button_text, callback_data=f"mine_{cell_num}"))
         keyboard.append(row_buttons)
     
-"# Кнопка вывода"
+# Кнопка вывода
     safe_cells_opened = len([c for c in game_data["opened"] if c not in game_data["mines"]])
     multiplier = 1.0 + (safe_cells_opened * 0.3)
     game_data["multiplier"] = multiplier
@@ -3865,7 +3843,7 @@ async def show_mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    game_text = f"""
+    game_text = f""
 "💣 *МИНЫ - ИГРА НАЧАТА*"
 
 💰 Ставка: *{format_number(game_data['bet_amount'])}*
@@ -3881,7 +3859,7 @@ async def show_mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Можно вывести деньги в любой момент"
 
 "⚠️ *ВНИМАНИЕ:* Если откроете мину - проиграете всю ставку!"
-"""
+    ""
     
     if update.callback_query:
         await update.callback_query.edit_message_text(
@@ -3897,7 +3875,7 @@ async def show_mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка клика по ячейке в игре Мины""""
+    "Обработка клика по ячейке в игре Мины"
     query = update.callback_query
     await query.answer()
     
@@ -3910,7 +3888,7 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     
     if "cashout" in query.data:
-"# Пользователь решил вывести"
+# Пользователь решил вывести
         safe_cells_opened = len([c for c in game_data["opened"] if c not in game_data["mines"]])
         multiplier = 1.0 + (safe_cells_opened * 0.3)
         win_amount = int(game_data["bet_amount"] * multiplier)
@@ -3918,13 +3896,13 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user.balance += win_amount
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount - game_data["bet_amount"], context)
         
-        result_text = f"""
+        result_text = f""
 "💰 *МИНЫ - ВЫИГРЫШ!* 🎉"
 
 ✅ Открыто безопасных ячеек: {safe_cells_opened}
@@ -3934,7 +3912,7 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
 💳 Новый баланс: *{format_number(user.balance)}*
 
 "🎮 Молодец! Вы вовремя вышли из игры!"
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
@@ -3954,24 +3932,24 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
     
-"# Обработка клика по ячейке"
+# Обработка клика по ячейке
     cell_num = int(query.data.split("_")[1])
     
-"# Проверяем, не открыта ли уже ячейка"
+# Проверяем, не открыта ли уже ячейка
     if cell_num in game_data["opened"]:
         await query.answer("Эта ячейка уже открыта!", show_alert=True)
         return
     
-"# Открываем ячейку"
+# Открываем ячейку
     game_data["opened"].append(cell_num)
     
-"# Проверяем, не мина ли это"
+# Проверяем, не мина ли это
     if cell_num in game_data["mines"]:
-"# Пользователь наступил на мину"
+# Пользователь наступил на мину
         user.loses += 1
         await db.save_user(user)
         
-"# Показываем поле с минами"
+# Показываем поле с минами
         keyboard = []
         for row in range(5):
             row_buttons = []
@@ -3990,7 +3968,7 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"""
+        result_text = f""
 "💥 *МИНЫ - ПРОИГРЫШ!* 😔"
 
 "💣 Вы наступили на мину!"
@@ -3998,7 +3976,7 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "💪 Удачи в следующий раз! Будьте осторожнее!"
-"""
+    ""
         
         await query.edit_message_text(
             result_text,
@@ -4007,18 +3985,18 @@ async def process_mine_click(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
     
-"# Если ячейка безопасная, продолжаем игру"
+# Если ячейка безопасная, продолжаем игру
     await show_mines_game_from_query(query, context)
 
 async def show_mines_game_from_query(query, context):
-""""Обновить игровое поле Мины после хода""""
+    "Обновить игровое поле Мины после хода"
     game_data = context.user_data.get("mines_game")
     if not game_data:
         return
     
     user_id = query.from_user.id
     
-"# Создаем клавиатуру"
+# Создаем клавиатуру
     keyboard = []
     for row in range(5):
         row_buttons = []
@@ -4034,7 +4012,7 @@ async def show_mines_game_from_query(query, context):
             row_buttons.append(InlineKeyboardButton(button_text, callback_data=f"mine_{cell_num}"))
         keyboard.append(row_buttons)
     
-"# Кнопка вывода"
+# Кнопка вывода
     safe_cells_opened = len([c for c in game_data["opened"] if c not in game_data["mines"]])
     multiplier = 1.0 + (safe_cells_opened * 0.3)
     game_data["multiplier"] = multiplier
@@ -4046,10 +4024,10 @@ async def show_mines_game_from_query(query, context):
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-"# Проверяем, не открыты ли все безопасные ячейки"
+# Проверяем, не открыты ли все безопасные ячейки
     total_safe_cells = 22  # 25 ячеек - 3 мины
     if safe_cells_opened == total_safe_cells:
-"# Пользователь открыл все безопасные ячейки!"
+# Пользователь открыл все безопасные ячейки!
         win_amount = int(game_data["bet_amount"] * 24.0)
         
         user = await db.get_user(user_id)
@@ -4060,7 +4038,7 @@ async def show_mines_game_from_query(query, context):
             await distribute_referral_bonus(user_id, win_amount - game_data["bet_amount"], context)
             await db.save_user(user)
         
-        result_text = f"""
+        result_text = f""
 "🎉 *МИНЫ - ДЖЕКПОТ!* 🏆"
 
 "🎯 Вы открыли ВСЕ безопасные ячейки!"
@@ -4070,7 +4048,7 @@ async def show_mines_game_from_query(query, context):
 💳 Новый баланс: *{format_number(user.balance)}*
 
 "🔥 Невероятная удача! Вы сорвали джекпот!"
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
@@ -4088,7 +4066,7 @@ async def show_mines_game_from_query(query, context):
         )
         return
     
-    game_text = f"""
+    game_text = f""
 "💣 *МИНЫ - ИГРА ПРОДОЛЖАЕТСЯ*"
 
 💰 Ставка: *{format_number(game_data['bet_amount'])}*
@@ -4102,7 +4080,7 @@ async def show_mines_game_from_query(query, context):
 💣 Из них мин: {3 - len([m for m in game_data['mines'] if m in game_data['opened']])}
 
 "🎯 Выбирайте следующую ячейку осторожно!"
-"""
+    ""
     
     await query.edit_message_text(
         game_text,
@@ -4111,7 +4089,7 @@ async def show_mines_game_from_query(query, context):
     )
 
 async def diamonds_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню игры Алмазы""""
+    "Меню игры Алмазы"
     query = update.callback_query
     await query.answer()
     
@@ -4122,7 +4100,7 @@ async def diamonds_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    diamonds_text = f"""
+    diamonds_text = f""
 "💎 *АЛМАЗЫ*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -4149,7 +4127,7 @@ async def diamonds_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Уровень 16: 24.0x"
 
 "💡 *СТРАТЕГИЯ:* Рискуйте, но знайте, когда остановиться!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("💎 Начать игру Алмазы", callback_data="diamonds_start")],
@@ -4166,11 +4144,11 @@ async def diamonds_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def diamonds_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика игры Алмазы""""
+    "Статистика игры Алмазы"
     query = update.callback_query
     await query.answer()
     
-    stats_text = """
+    stats_text = ""
 "📊 *СТАТИСТИКА ИГРЫ АЛМАЗЫ*"
 
 "💎 *ВЕРОЯТНОСТИ:*"
@@ -4195,7 +4173,7 @@ async def diamonds_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Только 1 из 1000 доходит до 10 уровня"
 
 "💡 *СОВЕТ:* Не поддавайтесь азарту! Выводите, когда множитель хороший."
-"""
+    ""
     
     await query.edit_message_text(
         stats_text,
@@ -4203,7 +4181,7 @@ async def diamonds_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def diamonds_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Начать игру Алмазы""""
+    "Начать игру Алмазы"
     query = update.callback_query
     await query.answer()
     
@@ -4215,7 +4193,7 @@ async def diamonds_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-"f"💎 *АЛМАЗЫ*\n\n""
+f"💎 *АЛМАЗЫ*\n\n"
         f"💰 Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите сумму ставки (мин. 100):",
         parse_mode=ParseMode.MARKDOWN
@@ -4228,7 +4206,7 @@ async def diamonds_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
 async def process_diamonds_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка начала игры Алмазы""""
+    "Обработка начала игры Алмазы"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -4248,24 +4226,24 @@ async def process_diamonds_start(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("❌ Введите корректное число!")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     await db.save_user(user)
     
-"# Начинаем игру"
+# Начинаем игру
     game_data = context.user_data["diamonds_game"]
     game_data["bet_amount"] = bet_amount
     game_data["level"] = 1
     game_data["multiplier"] = 1.0
     
-"# Генерируем позицию алмаза для первого уровня"
+# Генерируем позицию алмаза для первого уровня
     game_data["diamond_position"] = random.randint(1, 5)
     game_data["opened"] = []
     
     await show_diamonds_game(update, context)
 
 async def show_diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать игровое поле Алмазы""""
+    "Показать игровое поле Алмазы"
     game_data = context.user_data.get("diamonds_game")
     if not game_data:
         await update.message.reply_text("❌ Ошибка игры!")
@@ -4273,11 +4251,11 @@ async def show_diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     user_id = update.effective_user.id
     
-"# Расчет множителя"
+# Расчет множителя
     multiplier = 1.0 + (game_data["level"] - 1) * 0.5
     game_data["multiplier"] = multiplier
     
-"# Создаем клавиатуру с 5 ячейками"
+# Создаем клавиатуру с 5 ячейками
     keyboard = []
     row_buttons = []
     for i in range(1, 6):
@@ -4292,7 +4270,7 @@ async def show_diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     keyboard.append(row_buttons)
     
-"# Кнопка вывода"
+# Кнопка вывода
     potential_win = int(game_data["bet_amount"] * multiplier)
     
     keyboard.append([InlineKeyboardButton(f"💰 Забрать {format_number(potential_win)} (x{multiplier:.1f})", callback_data="diamonds_cashout")])
@@ -4300,7 +4278,7 @@ async def show_diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    game_text = f"""
+    game_text = f""
 💎 *АЛМАЗЫ - Уровень {game_data['level']}/16*
 
 💰 Ставка: *{format_number(game_data['bet_amount'])}*
@@ -4319,7 +4297,7 @@ async def show_diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE)
 "- Максимальный уровень 16: x24.0"
 
 ⚠️ *ВНИМАНИЕ:* С каждым уровнем шанс найти алмаз не меняется (20%)!
-"""
+    ""
     
     if update.callback_query:
         await update.callback_query.edit_message_text(
@@ -4333,10 +4311,10 @@ async def show_diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=reply_markup,
             parse_mode=ParseMode.MARKDOWN
     )
-"# БЛОК 5/6: Банк, работа, ферма BTC и биржа"
+# БЛОК 5/6: Банк, работа, ферма BTC и биржа
 
 async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка клика по ячейке в игре Алмазы""""
+    "Обработка клика по ячейке в игре Алмазы"
     query = update.callback_query
     await query.answer()
     
@@ -4349,18 +4327,18 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     if "cashout" in query.data:
-"# Пользователь решил вывести"
+# Пользователь решил вывести
         win_amount = int(game_data["bet_amount"] * game_data["multiplier"])
         user.balance += win_amount
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount - game_data["bet_amount"], context)
         
-        result_text = f"""
+        result_text = f""
 "💰 *АЛМАЗЫ - ВЫИГРЫШ!* 🎉"
 
 📈 Достигнутый уровень: {game_data['level']}
@@ -4370,7 +4348,7 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
 💳 Новый баланс: *{format_number(user.balance)}*
 
 "🎮 Хорошая игра! Вы вовремя остановились!"
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
@@ -4390,25 +4368,25 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
     
-"# Обработка клика по ячейке"
+# Обработка клика по ячейке
     cell_num = int(query.data.split("_")[1])
     
-"# Проверяем, не открыта ли уже ячейка"
+# Проверяем, не открыта ли уже ячейка
     if cell_num in game_data["opened"]:
         await query.answer("Эта ячейка уже открыта!", show_alert=True)
         return
     
-"# Открываем ячейку"
+# Открываем ячейку
     game_data["opened"].append(cell_num)
     
-"# Проверяем, нашли ли алмаз"
+# Проверяем, нашли ли алмаз
     if cell_num == game_data["diamond_position"]:
-"# Нашли алмаз! Переходим на следующий уровень"
+# Нашли алмаз! Переходим на следующий уровень
         game_data["level"] += 1
         
-"# Проверяем, не достигли ли максимального уровня"
+# Проверяем, не достигли ли максимального уровня
         if game_data["level"] > 16:
-"# Дошли до конца!"
+# Дошли до конца!
             win_amount = int(game_data["bet_amount"] * 24.0)  # Максимальный множитель
             user.balance += win_amount
             user.wins += 1
@@ -4417,7 +4395,7 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
             await distribute_referral_bonus(user_id, win_amount - game_data["bet_amount"], context)
             await db.save_user(user)
             
-            result_text = f"""
+            result_text = f""
 "🏆 *АЛМАЗЫ - ДЖЕКПОТ!* 🎉"
 
 "🎯 Вы прошли ВСЕ 16 уровней!"
@@ -4427,7 +4405,7 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
 💳 Новый баланс: *{format_number(user.balance)}*
 
 "🔥 Невероятная удача! Вы сорвали джекпот!"
-"""
+    ""
             
             if level_up:
                 result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
@@ -4445,12 +4423,12 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return
         
-"# Генерируем новую позицию алмаза для следующего уровня"
+# Генерируем новую позицию алмаза для следующего уровня
         game_data["diamond_position"] = random.randint(1, 5)
         game_data["opened"] = []
         
         await query.edit_message_text(
-"f"💎 *АЛМАЗ НАЙДЕН!*\n\n""
+f"💎 *АЛМАЗ НАЙДЕН!*\n\n"
             f"🎉 Переход на уровень {game_data['level']}!\n"
             f"📈 Новый множитель: *x{game_data['multiplier'] + 0.5:.1f}*",
             parse_mode=ParseMode.MARKDOWN
@@ -4458,11 +4436,11 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
         await asyncio.sleep(2)
         await show_diamonds_game_from_query(query, context)
     else:
-"# Нашли пустую коробку - проигрыш"
+# Нашли пустую коробку - проигрыш
         user.loses += 1
         await db.save_user(user)
         
-        result_text = f"""
+        result_text = f""
 "📦 *АЛМАЗЫ - ПРОИГРЫШ!* 😔"
 
 "❌ Вы нашли пустую коробку!"
@@ -4471,7 +4449,7 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "💎 Удачи в следующий раз! Алмаз был в другой ячейке..."
-"""
+    ""
         
         keyboard = [
             [InlineKeyboardButton("💎 Сыграть еще раз", callback_data="diamonds_menu")],
@@ -4486,18 +4464,18 @@ async def process_diamond_click(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
 async def show_diamonds_game_from_query(query, context):
-""""Обновить игровое поле Алмазы после успешного хода""""
+    "Обновить игровое поле Алмазы после успешного хода"
     game_data = context.user_data.get("diamonds_game")
     if not game_data:
         return
     
     user_id = query.from_user.id
     
-"# Расчет множителя"
+# Расчет множителя
     multiplier = 1.0 + (game_data["level"] - 1) * 0.5
     game_data["multiplier"] = multiplier
     
-"# Создаем клавиатуру с 5 ячейками"
+# Создаем клавиатуру с 5 ячейками
     keyboard = []
     row_buttons = []
     for i in range(1, 6):
@@ -4512,7 +4490,7 @@ async def show_diamonds_game_from_query(query, context):
     
     keyboard.append(row_buttons)
     
-"# Кнопка вывода"
+# Кнопка вывода
     potential_win = int(game_data["bet_amount"] * multiplier)
     
     keyboard.append([InlineKeyboardButton(f"💰 Забрать {format_number(potential_win)} (x{multiplier:.1f})", callback_data="diamonds_cashout")])
@@ -4520,7 +4498,7 @@ async def show_diamonds_game_from_query(query, context):
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    game_text = f"""
+    game_text = f""
 💎 *АЛМАЗЫ - Уровень {game_data['level']}/16*
 
 💰 Ставка: *{format_number(game_data['bet_amount'])}*
@@ -4533,7 +4511,7 @@ async def show_diamonds_game_from_query(query, context):
 - До джекпота осталось: {16 - game_data['level']} уровней
 
 "⚠️ *СОВЕТ:* Каждый следующий уровень увеличивает множитель на 0.5x!"
-"""
+    ""
     
     await query.edit_message_text(
         game_text,
@@ -4542,7 +4520,7 @@ async def show_diamonds_game_from_query(query, context):
     )
 
 async def blackjack_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню игры Очко (21/Блекджек)"""
+    "Меню игры Очко (21/Блекджек)"
     query = update.callback_query
     await query.answer()
     
@@ -4553,7 +4531,7 @@ async def blackjack_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-    blackjack_text = f"""
+    blackjack_text = f""
 🃏 *ОЧКО (21/БЛЕКДЖЕК)*
 
 💰 Ваш баланс: *{format_number(user.balance)}*
@@ -4581,7 +4559,7 @@ async def blackjack_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Проигрыш: потеря ставки"
 
 "💡 *СТРАТЕГИЯ:* Дилер обязан брать карты до 17 и останавливаться на 17+"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("🃏 Начать игру Очко", callback_data="blackjack_start")],
@@ -4598,11 +4576,11 @@ async def blackjack_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def blackjack_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика игры Очко""""
+    "Статистика игры Очко"
     query = update.callback_query
     await query.answer()
     
-    stats_text = """
+    stats_text = ""
 📊 *СТАТИСТИКА ИГРЫ ОЧКО (21)*
 
 "🎴 *ВЕРОЯТНОСТИ:*"
@@ -4632,7 +4610,7 @@ async def blackjack_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "2. Никогда не берите карту при 17+"
 "3. Помните, что дилер обязан брать до 17"
 "4. Играйте по стратегии, не полагайтесь только на удачу"
-"""
+    ""
     
     await query.edit_message_text(
         stats_text,
@@ -4640,7 +4618,7 @@ async def blackjack_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def blackjack_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Начать игру Очко""""
+    "Начать игру Очко"
     query = update.callback_query
     await query.answer()
     
@@ -4660,7 +4638,7 @@ async def blackjack_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["awaiting_blackjack_bet"] = True
 
 async def process_blackjack_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка начала игры Очко""""
+    "Обработка начала игры Очко"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -4680,15 +4658,15 @@ async def process_blackjack_start(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text("❌ Введите корректное число!")
         return
     
-"# Вычитаем ставку"
+# Вычитаем ставку
     user.balance -= bet_amount
     await db.save_user(user)
     
     # Создаем колоду (упрощенная - бесконечная колода)
-"# В реальной игре нужно использовать одну колоду или несколько"
-"# Здесь для простоты используем бесконечную колоду"
+# В реальной игре нужно использовать одну колоду или несколько
+# Здесь для простоты используем бесконечную колоду
     
-"# Инициализируем игру"
+# Инициализируем игру
     context.user_data["blackjack_game"] = {
         "bet_amount": bet_amount,
         "player_cards": [],
@@ -4700,31 +4678,31 @@ async def process_blackjack_start(update: Update, context: ContextTypes.DEFAULT_
     
     game_data = context.user_data["blackjack_game"]
     
-"# Раздаем начальные карты"
+# Раздаем начальные карты
     game_data["player_cards"] = [draw_card(), draw_card()]
     game_data["dealer_cards"] = [draw_card(), draw_card()]
     
-"# Рассчитываем очки"
+# Рассчитываем очки
     game_data["player_score"] = calculate_score(game_data["player_cards"])
     game_data["dealer_score"] = calculate_score([game_data["dealer_cards"][0]])  # Только первая карта дилера видна
     
-"# Проверяем блекджек у игрока"
+# Проверяем блекджек у игрока
     if game_data["player_score"] == 21:
-"# У игрока блекджек!"
+# У игрока блекджек!
         win_amount = int(bet_amount * 2.5)
         user.balance += win_amount + bet_amount  # Возвращаем ставку + выигрыш
         user.wins += 1
         
-"# Добавляем опыт"
+# Добавляем опыт
         level_up = add_exp(user)
         
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
         await distribute_referral_bonus(user_id, win_amount, context)
         
-"# Рассчитываем очки дилера для отображения"
+# Рассчитываем очки дилера для отображения
         dealer_final_score = calculate_score(game_data["dealer_cards"])
         
-        result_text = f"""
+        result_text = f""
 "🏆 *ОЧКО - БЛЕКДЖЕК!* 🎉"
 
 🎴 Ваши карты: {format_cards(game_data['player_cards'])} ({game_data['player_score']})
@@ -4735,7 +4713,7 @@ async def process_blackjack_start(update: Update, context: ContextTypes.DEFAULT_
 💳 Новый баланс: *{format_number(user.balance)}*
 
 "🔥 Невероятно! Блекджек с первой раздачи!"
-"""
+    ""
         
         if level_up:
             result_text += f"\n🎊 *УРОВЕНЬ ПОВЫШЕН!*\nТеперь у вас {user.level} уровень!"
@@ -4755,16 +4733,16 @@ async def process_blackjack_start(update: Update, context: ContextTypes.DEFAULT_
         )
         return
     
-"# Если нет блекджека, продолжаем игру"
+# Если нет блекджека, продолжаем игру
     await show_blackjack_game(update, context)
 
 def draw_card():
-""""Вытянуть случайную карту""""
+    "Вытянуть случайную карту"
     cards = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
     return random.choice(cards)
 
 def calculate_score(cards):
-""""Рассчитать сумму очков""""
+    "Рассчитать сумму очков"
     score = 0
     aces = 0
     
@@ -4777,7 +4755,7 @@ def calculate_score(cards):
         else:
             score += int(card)
     
-"# Если сумма больше 21 и есть тузы, считаем тузы как 1"
+# Если сумма больше 21 и есть тузы, считаем тузы как 1
     while score > 21 and aces > 0:
         score -= 10
         aces -= 1
@@ -4785,7 +4763,7 @@ def calculate_score(cards):
     return score
 
 def format_cards(cards):
-""""Форматировать карты для отображения""""
+    "Форматировать карты для отображения"
     suits = ['♠️', '♥️', '♦️', '♣️']
     result = []
     for card in cards:
@@ -4794,7 +4772,7 @@ def format_cards(cards):
     return ' '.join(result)
 
 async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Показать текущее состояние игры Очко""""
+    "Показать текущее состояние игры Очко"
     game_data = context.user_data.get("blackjack_game")
     if not game_data:
         await update.message.reply_text("❌ Ошибка игры!")
@@ -4802,24 +4780,24 @@ async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     user_id = update.effective_user.id
     
-"# Форматируем карты"
+# Форматируем карты
     player_cards_formatted = format_cards(game_data["player_cards"])
     dealer_cards_formatted = format_cards([game_data["dealer_cards"][0]]) + " ? ?"
     
-"# Определяем, закончена ли игра"
+# Определяем, закончена ли игра
     if game_data["game_over"]:
-"# Игра закончена, показываем результат"
+# Игра закончена, показываем результат
         dealer_final_score = calculate_score(game_data["dealer_cards"])
         
-        result_text = f"""
+        result_text = f""
 "🎴 *ОЧКО - ИГРА ЗАВЕРШЕНА*"
 
 🎴 Ваши карты: {format_cards(game_data['player_cards'])} ({game_data['player_score']})
 🎴 Карты дилера: {format_cards(game_data['dealer_cards'])} ({dealer_final_score})
 
-"""
+    ""
         
-"# Определяем победителя"
+# Определяем победителя
         player_score = game_data["player_score"]
         dealer_score = dealer_final_score
         
@@ -4834,7 +4812,7 @@ async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             result_text += f"🤝 *НИЧЬЯ!* {player_score} = {dealer_score}\n💰 Ставка возвращена: *{format_number(game_data['bet_amount'])}*"
         
-"# Обновляем баланс пользователя"
+# Обновляем баланс пользователя
         user = await db.get_user(user_id)
         if user:
             if player_score > 21 or (dealer_score <= 21 and player_score < dealer_score):
@@ -4843,10 +4821,10 @@ async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE
                 user.wins += 1
                 user.balance += game_data["bet_amount"] * 2
                 
-"# Добавляем опыт"
+# Добавляем опыт
                 level_up = add_exp(user)
                 
-"# Распределяем реферальный бонус"
+# Распределяем реферальный бонус
                 await distribute_referral_bonus(user_id, game_data["bet_amount"], context)
                 
                 if level_up:
@@ -4878,8 +4856,8 @@ async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
         return
     
-"# Игра продолжается"
-    game_text = f"""
+# Игра продолжается
+    game_text = f""
 🃏 *ОЧКО (21) - ВАШ ХОД*
 
 🎴 Карты дилера: {dealer_cards_formatted}
@@ -4890,7 +4868,7 @@ async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "⚠️ *ВНИМАНИЕ:* Если возьмете карту и сумма превысит 21 - проиграете!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("➕ Еще карту", callback_data="blackjack_hit"),
@@ -4914,7 +4892,7 @@ async def show_blackjack_game(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
 async def blackjack_hit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Игрок берет еще карту""""
+    "Игрок берет еще карту"
     query = update.callback_query
     await query.answer()
     
@@ -4925,18 +4903,18 @@ async def blackjack_hit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Ошибка игры!")
         return
     
-"# Добавляем карту игроку"
+# Добавляем карту игроку
     game_data["player_cards"].append(draw_card())
     game_data["player_score"] = calculate_score(game_data["player_cards"])
     
-"# Проверяем, не перебрал ли игрок"
+# Проверяем, не перебрал ли игрок
     if game_data["player_score"] > 21:
         game_data["game_over"] = True
     
     await show_blackjack_game_from_query(query, context)
 
 async def blackjack_stand(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Игрок останавливается""""
+    "Игрок останавливается"
     query = update.callback_query
     await query.answer()
     
@@ -4947,10 +4925,10 @@ async def blackjack_stand(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Ошибка игры!")
         return
     
-"# Ход дилера"
+# Ход дилера
     game_data["dealer_score"] = calculate_score(game_data["dealer_cards"])
     
-"# Дилер берет карты, пока не наберет 17 или больше"
+# Дилер берет карты, пока не наберет 17 или больше
     while game_data["dealer_score"] < 17:
         game_data["dealer_cards"].append(draw_card())
         game_data["dealer_score"] = calculate_score(game_data["dealer_cards"])
@@ -4959,7 +4937,7 @@ async def blackjack_stand(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_blackjack_game_from_query(query, context)
 
 async def show_blackjack_game_from_query(query, context):
-""""Обновить состояние игры Очко после хода""""
+    "Обновить состояние игры Очко после хода"
     game_data = context.user_data.get("blackjack_game")
     if not game_data:
         return
@@ -4967,24 +4945,24 @@ async def show_blackjack_game_from_query(query, context):
     user_id = query.from_user.id
     user = await db.get_user(user_id)
     
-"# Если игра закончена, показываем финальный результат"
+# Если игра закончена, показываем финальный результат
     if game_data["game_over"]:
-"# Форматируем карты"
+# Форматируем карты
         player_cards_formatted = format_cards(game_data["player_cards"])
         dealer_cards_formatted = format_cards(game_data["dealer_cards"])
         
         dealer_final_score = calculate_score(game_data["dealer_cards"])
         player_score = game_data["player_score"]
         
-        result_text = f"""
+        result_text = f""
 "🎴 *ОЧКО - РЕЗУЛЬТАТ*"
 
 🎴 Ваши карты: {player_cards_formatted} ({player_score})
 🎴 Карты дилера: {dealer_cards_formatted} ({dealer_final_score})
 
-"""
+    ""
         
-"# Определяем победителя"
+# Определяем победителя
         if player_score > 21:
             result_text += f"❌ *ПЕРЕБОР!* Вы проиграли.\n💸 Ставка: *{format_number(game_data['bet_amount'])}*"
             user.loses += 1
@@ -5027,11 +5005,11 @@ async def show_blackjack_game_from_query(query, context):
         )
         return
     
-"# Игра продолжается"
+# Игра продолжается
     player_cards_formatted = format_cards(game_data["player_cards"])
     dealer_cards_formatted = format_cards([game_data["dealer_cards"][0]]) + " ? ?"
     
-    game_text = f"""
+    game_text = f""
 🃏 *ОЧКО (21) - ВАШ ХОД*
 
 🎴 Карты дилера: {dealer_cards_formatted}
@@ -5042,7 +5020,7 @@ async def show_blackjack_game_from_query(query, context):
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 {f'⚠️ *ВНИМАНИЕ:* Сумма {game_data["player_score"]} - близко к 21!' if game_data['player_score'] > 15 else ''}
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("➕ Еще карту", callback_data="blackjack_hit"),
@@ -5059,7 +5037,7 @@ async def show_blackjack_game_from_query(query, context):
     )
 
 async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню банка""""
+    "Меню банка"
     query = update.callback_query
     await query.answer()
     
@@ -5070,10 +5048,10 @@ async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Рассчитываем ежедневный доход"
+# Рассчитываем ежедневный доход
     daily_income = int(user.bank * 0.05)
     
-    bank_text = f"""
+    bank_text = f""
 "🏦 *БАНКОВСКАЯ СИСТЕМА*"
 
 💰 На счету: *{format_number(user.bank)}*
@@ -5090,7 +5068,7 @@ async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Перевод по ID пользователя"
 
 "💡 *СОВЕТ:* Храните деньги в банке для пассивного дохода!"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("💰 Положить в банк", callback_data="bank_deposit"),
@@ -5109,7 +5087,7 @@ async def bank_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def bank_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Положить деньги в банк""""
+    "Положить деньги в банк"
     query = update.callback_query
     await query.answer()
     
@@ -5121,7 +5099,7 @@ async def bank_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-"f"🏦 *ВНЕСЕНИЕ В БАНК*\n\n""
+f"🏦 *ВНЕСЕНИЕ В БАНК*\n\n"
         f"💰 Ваш баланс: *{format_number(user.balance)}*\n"
         f"🏦 В банке: *{format_number(user.bank)}*\n\n"
         f"Введите сумму для внесения (мин. 100):",
@@ -5130,7 +5108,7 @@ async def bank_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["bank_action"] = "deposit"
 
 async def bank_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Снять деньги с банка""""
+    "Снять деньги с банка"
     query = update.callback_query
     await query.answer()
     
@@ -5142,7 +5120,7 @@ async def bank_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-"f"🏦 *СНЯТИЕ С БАНКА*\n\n""
+f"🏦 *СНЯТИЕ С БАНКА*\n\n"
         f"🏦 В банке: *{format_number(user.bank)}*\n"
         f"💰 На балансе: *{format_number(user.balance)}*\n\n"
         f"Введите сумму для снятия (мин. 100):",
@@ -5151,7 +5129,7 @@ async def bank_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["bank_action"] = "withdraw"
 
 async def bank_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Перевод другому игроку""""
+    "Перевод другому игроку"
     query = update.callback_query
     await query.answer()
     
@@ -5163,7 +5141,7 @@ async def bank_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-"f"📤 *ПЕРЕВОД ДРУГОМУ ИГРОКУ*\n\n""
+f"📤 *ПЕРЕВОД ДРУГОМУ ИГРОКУ*\n\n"
         f"💰 Ваш баланс: *{format_number(user.balance)}*\n\n"
         f"Введите ID получателя (цифры):",
         parse_mode=ParseMode.MARKDOWN
@@ -5171,7 +5149,7 @@ async def bank_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["bank_action"] = "transfer_id"
 
 async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка банковских операций""""
+    "Обработка банковских операций"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -5196,7 +5174,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             await db.save_user(user)
             
-            result_text = f"""
+            result_text = f""
 "✅ *СРЕДСТВА ВНЕСЕНЫ В БАНК*"
 
 💰 Сумма: *{format_number(amount)}*
@@ -5205,7 +5183,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 📈 Ежедневный доход увеличился на *{format_number(int(amount * 0.05))}*
 💡 Теперь вы будете получать *{format_number(int(user.bank * 0.05))}* каждый день!
-"""
+    ""
         except ValueError:
             await update.message.reply_text("❌ Введите корректное число!")
             return
@@ -5225,7 +5203,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             await db.save_user(user)
             
-            result_text = f"""
+            result_text = f""
 "✅ *СРЕДСТВА СНЯТЫ С БАНКА*"
 
 💰 Сумма: *{format_number(amount)}*
@@ -5233,7 +5211,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 💳 На балансе: *{format_number(user.balance)}*
 
 📉 Ежедневный доход уменьшился на *{format_number(int(amount * 0.05))}*
-"""
+    ""
         except ValueError:
             await update.message.reply_text("❌ Введите корректное число!")
             return
@@ -5248,7 +5226,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             context.user_data["transfer_receiver_id"] = receiver_id
             await update.message.reply_text(
-"f"📤 *ПЕРЕВОД ИГРОКУ*\n\n""
+f"📤 *ПЕРЕВОД ИГРОКУ*\n\n"
                 f"Получатель: ID `{receiver_id}`\n"
                 f"💰 Ваш баланс: *{format_number(user.balance)}*\n\n"
                 f"Введите сумму перевода (мин. 100):",
@@ -5276,24 +5254,24 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await update.message.reply_text("❌ Недостаточно средств!")
                 return
             
-"# Получаем получателя"
+# Получаем получателя
             receiver = await db.get_user(receiver_id)
             if not receiver:
                 await update.message.reply_text("❌ Пользователь с таким ID не найден!")
                 return
             
-"# Выполняем перевод"
+# Выполняем перевод
             user.balance -= amount
             receiver.balance += amount
             
             await db.save_user(user)
             await db.save_user(receiver)
             
-"# Отправляем уведомление получателю"
+# Отправляем уведомление получателю
             try:
                 await context.bot.send_message(
                     chat_id=receiver_id,
-                    text=f"""
+                    text=f""
 "📥 *ВАМ ПЕРЕВЕЛИ ДЕНЬГИ!*"
 
 👤 Отправитель: @{user.username if user.username else f'ID: {user_id}'}
@@ -5301,13 +5279,13 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 💳 Ваш баланс: *{format_number(receiver.balance)}*
 
 "💡 Не забудьте поблагодарить отправителя!"
-""",
+"",
                     parse_mode=ParseMode.MARKDOWN
                 )
             except:
                 pass
             
-            result_text = f"""
+            result_text = f""
 "✅ *ПЕРЕВОД ВЫПОЛНЕН!*"
 
 👤 Получатель: ID `{receiver_id}`
@@ -5315,7 +5293,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 💳 Ваш баланс: *{format_number(user.balance)}*
 
 "📤 Деньги успешно отправлены!"
-"""
+    ""
         except ValueError:
             await update.message.reply_text("❌ Введите корректное число!")
             return
@@ -5324,7 +5302,7 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ Неизвестное действие!")
         return
     
-"# Очищаем данные контекста"
+# Очищаем данные контекста
     context.user_data.pop("bank_action", None)
     context.user_data.pop("transfer_receiver_id", None)
     
@@ -5336,10 +5314,10 @@ async def process_bank_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=reply_markup,
         parse_mode=ParseMode.MARKDOWN
     )
-"# БЛОК 6/6: Работа, ферма BTC, биржа, админ-панель и запуск бота"
+# БЛОК 6/6: Работа, ферма BTC, биржа, админ-панель и запуск бота
 
 async def jobs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню работы""""
+    "Меню работы"
     query = update.callback_query
     await query.answer()
     
@@ -5350,8 +5328,8 @@ async def jobs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Показываем текущую работу пользователя"
-    current_job_text = ""
+# Показываем текущую работу пользователя
+    current_job_text = "
     if user.job:
         job_info = JOBS.get(user.job, {})
         job_name = job_info.get("name", "Неизвестно")
@@ -5359,7 +5337,7 @@ async def jobs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         current_job_text = "💼 *Текущая работа:* Не выбрана\n"
     
-"# Проверяем, можно ли работать"
+# Проверяем, можно ли работать
     can_work = True
     if user.last_work:
         time_since = datetime.datetime.now() - user.last_work
@@ -5369,20 +5347,20 @@ async def jobs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             seconds_left = int(300 - time_since.total_seconds()) % 60
             current_job_text += f"⏳ *Доступно через:* {minutes_left} мин {seconds_left} сек\n"
     
-    jobs_text = f"""
+    jobs_text = f""
 "👷 *СИСТЕМА РАБОТЫ*"
 
 {current_job_text}
 💰 Ваш баланс: *{format_number(user.balance)}*
 
 "📊 *ДОСТУПНЫЕ РАБОТЫ:*"
-"""
+    ""
     
     keyboard = []
     for job_id, job_info in JOBS.items():
         button_text = f"{job_info['name']} ({format_number(job_info['min_salary'])}-{format_number(job_info['max_salary'])})"
         
-"# Если у пользователя уже выбрана эта работа, помечаем"
+# Если у пользователя уже выбрана эта работа, помечаем
         if user.job == job_id:
             button_text += " ✅"
         
@@ -5403,7 +5381,7 @@ async def jobs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def select_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Выбор работы""""
+    "Выбор работы"
     query = update.callback_query
     await query.answer()
     
@@ -5421,12 +5399,12 @@ async def select_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Работа не найдена!")
         return
     
-"# Устанавливаем работу"
+# Устанавливаем работу
     user.job = job_id
     await db.save_user(user)
     
     await query.edit_message_text(
-        f"""
+        f""
 "✅ *РАБОТА ВЫБРАНА!*"
 
 {job_info['name']}
@@ -5438,12 +5416,12 @@ async def select_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 "💼 Используйте кнопку "Выполнить работу" для заработка"
 "или команду /work"
-""",
+"",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def do_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Выполнение работы""""
+    "Выполнение работы"
     query = update.callback_query
     await query.answer()
     
@@ -5458,14 +5436,14 @@ async def do_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала выберите работу!")
         return
     
-"# Проверяем, можно ли работать"
+# Проверяем, можно ли работать
     if user.last_work:
         time_since = datetime.datetime.now() - user.last_work
         if time_since.total_seconds() < 300:
             minutes_left = int((300 - time_since.total_seconds()) / 60)
             seconds_left = int(300 - time_since.total_seconds()) % 60
             await query.edit_message_text(
-"f"⏳ Вы уже работали недавно!\n""
+f"⏳ Вы уже работали недавно!\n"
                 f"Отдохните еще {minutes_left} минут {seconds_left} секунд",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -5476,10 +5454,10 @@ async def do_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Информация о работе не найдена!")
         return
     
-"# Начинаем анимацию работы"
+# Начинаем анимацию работы
     work_message = await query.edit_message_text(f"💼 {job_info['name']}...")
     
-"# Процессы для разных работ"
+# Процессы для разных работ
     processes = {
         "digger": ["🔍 Ищем место для раскопок...", "⛏️ Копаем...", "💰 Нашли сундук!", "🎯 Открываем..."],
         "hacker": ["💻 Подключаемся к серверу...", "🔓 Взламываем защиту...", "📁 Ищем данные...", "💾 Скачиваем информацию..."],
@@ -5489,7 +5467,7 @@ async def do_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     process_steps = processes.get(user.job, ["Работаем...", "Продолжаем...", "Завершаем..."])
     
-"# Анимация процесса работы"
+# Анимация процесса работы
     for step in process_steps:
         await asyncio.sleep(1)
         try:
@@ -5497,32 +5475,32 @@ async def do_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     
-"# Начисляем зарплату"
+# Начисляем зарплату
     salary = random.randint(job_info["min_salary"], job_info["max_salary"])
     user.balance += salary
     
-"# Проверяем, найден ли BTC"
+# Проверяем, найден ли BTC
     btc_found = 0.0
     if random.random() < job_info["btc_chance"] / 100:
         btc_found = random.uniform(0.001, 0.01)
         user.btc += btc_found
     
-"# Добавляем опыт"
+# Добавляем опыт
     level_up = add_exp(user)
     
-"# Обновляем время последней работы"
+# Обновляем время последней работы
     user.last_work = datetime.datetime.now()
     
     await db.save_user(user)
     
-"# Формируем результат"
-    result_text = f"""
+# Формируем результат
+    result_text = f""
 "✅ *РАБОТА ВЫПОЛНЕНА!*"
 
 💼 Профессия: {job_info['name']}
 💰 Зарплата: *{format_number(salary)}*
 💰 Баланс: *{format_number(user.balance)}*
-"""
+    ""
     
     if btc_found > 0:
         result_text += f"\n🎉 *ВЫ НАШЛИ BTC!* +{btc_found:.4f} ₿\n"
@@ -5546,7 +5524,7 @@ async def do_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def work_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика работы""""
+    "Статистика работы"
     query = update.callback_query
     await query.answer()
     
@@ -5557,10 +5535,10 @@ async def work_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Считаем примерный заработок с работы"
+# Считаем примерный заработок с работы
     total_earned = user.balance + user.bank - 10000  # Примерный расчет
     
-    stats_text = f"""
+    stats_text = f""
 "📊 *СТАТИСТИКА РАБОТЫ*"
 
 💼 Текущая работа: {JOBS.get(user.job, {}).get('name', 'Не выбрана') if user.job else 'Не выбрана'}
@@ -5577,7 +5555,7 @@ async def work_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "1. Выбирайте работу с высокой зарплатой"
 "2. Работайте регулярно для стабильного дохода"
 "3. BTC можно продать на бирже"
-"""
+    ""
     
     keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="jobs_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -5589,7 +5567,7 @@ async def work_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню фермы BTC""""
+    "Меню фермы BTC"
     query = update.callback_query
     await query.answer()
     
@@ -5600,14 +5578,14 @@ async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем ферму пользователя"
+# Получаем ферму пользователя
     farm_items = await db.get_user_farm(user_id)
     
-"# Рассчитываем доход"
+# Рассчитываем доход
     btc_income = await calculate_gpu_income(user_id)
     
-"# Формируем информацию о ферме"
-    farm_info = ""
+# Формируем информацию о ферме
+    farm_info = "
     total_income_per_hour = 0.0
     
     if farm_items:
@@ -5620,7 +5598,7 @@ async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         farm_info = "📭 У вас нет видеокарт"
     
-    farm_text = f"""
+    farm_text = f""
 "🖥 *ФЕРМА BTC*"
 
 💰 Накоплено: *{btc_income:.4f} BTC*
@@ -5637,7 +5615,7 @@ async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "2. Они майнят BTC 24/7"
 "3. Собирайте накопленный BTC"
 "4. Продавайте на бирже или храните"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("💰 Собрать доход", callback_data="farm_collect")],
@@ -5655,7 +5633,7 @@ async def farm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def farm_collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Собрать доход с фермы""""
+    "Собрать доход с фермы"
     query = update.callback_query
     await query.answer()
     
@@ -5666,17 +5644,17 @@ async def farm_collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Рассчитываем доход"
+# Рассчитываем доход
     btc_income = await calculate_gpu_income(user_id)
     
     if btc_income <= 0:
         await query.answer("❌ Нет накопленного дохода!", show_alert=True)
         return
     
-"# Начисляем BTC"
+# Начисляем BTC
     user.btc += btc_income
     
-"# Обновляем время сбора для всех видеокарт"
+# Обновляем время сбора для всех видеокарт
     farm_items = await db.get_user_farm(user_id)
     current_time = datetime.datetime.now()
     
@@ -5686,11 +5664,11 @@ async def farm_collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await db.save_user(user)
     
-"# Рассчитываем эквивалент в деньгах"
+# Рассчитываем эквивалент в деньгах
     money_value = int(btc_income * btc_price)
     
     await query.edit_message_text(
-        f"""
+        f""
 "✅ *ДОХОД СОБРАН!*"
 
 💰 Собрано: *{btc_income:.4f} BTC*
@@ -5700,12 +5678,12 @@ async def farm_collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📊 По курсу: 1 BTC = {format_number(btc_price)}
 
 "💡 *СОВЕТ:* Вы можете продать BTC на бирже или продолжать накапливать!"
-""",
+"",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def farm_buy_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Меню покупки видеокарт""""
+    "Меню покупки видеокарт"
     query = update.callback_query
     await query.answer()
     
@@ -5716,31 +5694,31 @@ async def farm_buy_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем текущие видеокарты пользователя"
+# Получаем текущие видеокарты пользователя
     farm_items = await db.get_user_farm(user_id)
     gpu_quantities = {farm.gpu_type: farm.quantity for farm in farm_items}
     
-    farm_text = f"""
+    farm_text = f""
 "🖥 *ПОКУПКА ВИДЕОКАРТ*"
 
 💰 Ваш баланс: *{format_number(user.balance)}*
 ₿ Ваш BTC: *{user.btc:.4f}*
 
 "💡 *ВЫБЕРИТЕ ВИДЕОКАРТУ:*"
-"""
+    ""
     
     keyboard = []
     
     for gpu_type, gpu_data in GPU_TYPES.items():
         quantity = gpu_quantities.get(gpu_type, 0)
         
-"# Рассчитываем цену с учетом роста"
+# Рассчитываем цену с учетом роста
         price = int(gpu_data["base_price"] * (gpu_data["price_increase"] ** quantity))
         
-"# Формируем текст кнопки"
+# Формируем текст кнопки
         button_text = f"{gpu_data['name']} - {format_number(price)}"
         
-"# Проверяем, достигнут ли лимит"
+# Проверяем, достигнут ли лимит
         if quantity >= gpu_data["max_quantity"]:
             button_text += " (MAX)"
             callback_data = "none"
@@ -5749,7 +5727,7 @@ async def farm_buy_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
         
-"# Добавляем информацию о видеокарте в текст"
+# Добавляем информацию о видеокарте в текст
         farm_text += f"\n{gpu_data['name']}:"
         farm_text += f"\n  📈 Доходность: {gpu_data['income_per_hour']} BTC/час"
         farm_text += f"\n  💰 Базовая цена: {format_number(gpu_data['base_price'])}"
@@ -5768,7 +5746,7 @@ async def farm_buy_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def buy_gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Покупка видеокарты""""
+    "Покупка видеокарты"
     query = update.callback_query
     await query.answer()
     
@@ -5786,28 +5764,28 @@ async def buy_gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Видеокарта не найдена!")
         return
     
-"# Получаем текущее количество видеокарт"
+# Получаем текущее количество видеокарт
     farm_items = await db.get_user_farm(user_id)
     gpu_quantities = {farm.gpu_type: farm.quantity for farm in farm_items}
     quantity = gpu_quantities.get(gpu_type, 0)
     
-"# Проверяем лимит"
+# Проверяем лимит
     if quantity >= gpu_data["max_quantity"]:
         await query.answer("❌ Достигнут лимит покупки этой видеокарты!", show_alert=True)
         return
     
-"# Рассчитываем цену"
+# Рассчитываем цену
     price = int(gpu_data["base_price"] * (gpu_data["price_increase"] ** quantity))
     
-"# Проверяем баланс"
+# Проверяем баланс
     if price > user.balance:
         await query.answer("❌ Недостаточно средств!", show_alert=True)
         return
     
-"# Списание денег"
+# Списание денег
     user.balance -= price
     
-"# Добавляем/обновляем видеокарту"
+# Добавляем/обновляем видеокарту
     existing_farm = None
     for farm in farm_items:
         if farm.gpu_type == gpu_type:
@@ -5828,11 +5806,11 @@ async def buy_gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await db.save_user(user)
     
-"# Рассчитываем новый доход"
+# Рассчитываем новый доход
     new_income_per_hour = gpu_data["income_per_hour"] * (quantity + 1)
     
     await query.edit_message_text(
-        f"""
+        f""
 "✅ *ВИДЕОКАРТА КУПЛЕНА!*"
 
 {gpu_data['name']}
@@ -5844,12 +5822,12 @@ async def buy_gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ₿ Общий доход с фермы: +{new_income_per_hour:.3f} BTC/час
 
 "💡 *СОВЕТ:* Не забывайте регулярно собирать доход!"
-""",
+"",
         parse_mode=ParseMode.MARKDOWN
     )
 
 async def farm_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Статистика фермы""""
+    "Статистика фермы"
     query = update.callback_query
     await query.answer()
     
@@ -5860,18 +5838,18 @@ async def farm_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Сначала зарегистрируйтесь!")
         return
     
-"# Получаем ферму пользователя"
+# Получаем ферму пользователя
     farm_items = await db.get_user_farm(user_id)
     
     if not farm_items:
         await query.edit_message_text(
-""📭 *ВАША ФЕРМА ПУСТА*\n\n""
-""Купите видеокарты в магазине, чтобы начать майнинг BTC!","
+"📭 *ВАША ФЕРМА ПУСТА*\n\n"
+"Купите видеокарты в магазине, чтобы начать майнинг BTC!","
             parse_mode=ParseMode.MARKDOWN
         )
         return
     
-"# Рассчитываем статистику"
+# Рассчитываем статистику
     total_gpus = 0
     total_invested = 0
     total_income_per_hour = 0.0
@@ -5883,7 +5861,7 @@ async def farm_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             gpu_data = GPU_TYPES[farm.gpu_type]
             total_gpus += farm.quantity
             
-"# Рассчитываем общие вложения в эту модель"
+# Рассчитываем общие вложения в эту модель
             total_price_for_model = 0
             for i in range(farm.quantity):
                 total_price_for_model += int(gpu_data["base_price"] * (gpu_data["price_increase"] ** i))
@@ -5898,7 +5876,7 @@ async def farm_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stats_text += f"  📈 Доход/час: {income_per_hour:.3f} BTC\n"
             stats_text += f"  💵 Доход/час в $: {format_number(int(income_per_hour * btc_price))}\n\n"
     
-"# Рассчитываем окупаемость"
+# Рассчитываем окупаемость
     daily_income_btc = total_income_per_hour * 24
     daily_income_money = int(daily_income_btc * btc_price)
     
@@ -5928,7 +5906,7 @@ async def farm_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def btc_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Биржа BTC""""
+    "Биржа BTC"
     query = update.callback_query
     await query.answer()
     
@@ -5941,7 +5919,7 @@ async def btc_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     global btc_price
     
-    market_text = f"""
+    market_text = f""
 "📊 *БИРЖА BTC*"
 
 💰 Текущий курс: *1 BTC = {format_number(btc_price)}*
@@ -5958,7 +5936,7 @@ async def btc_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "- Покупайте, когда курс низкий"
 "- Продавайте, когда курс высокий"
 "- Храните BTC для долгосрочной прибыли"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("💰 Купить BTC", callback_data="btc_buy"),
@@ -5977,7 +5955,7 @@ async def btc_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def btc_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Покупка BTC""""
+    "Покупка BTC"
     query = update.callback_query
     await query.answer()
     
@@ -5991,7 +5969,7 @@ async def btc_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global btc_price
     
     await query.edit_message_text(
-        f"""
+        f""
 "💰 *ПОКУПКА BTC*"
 
 📊 Текущий курс: 1 BTC = {format_number(btc_price)}
@@ -6003,12 +5981,12 @@ async def btc_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2. Или введите количество BTC (например: 0.01)
 
 "Минимальная покупка: 100"
-"""
+    ""
     )
     context.user_data["btc_action"] = "buy"
 
 async def btc_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Продажа BTC""""
+    "Продажа BTC"
     query = update.callback_query
     await query.answer()
     
@@ -6022,7 +6000,7 @@ async def btc_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global btc_price
     
     await query.edit_message_text(
-        f"""
+        f""
 "💸 *ПРОДАЖА BTC*"
 
 📊 Текущий курс: 1 BTC = {format_number(btc_price)}
@@ -6034,18 +6012,18 @@ async def btc_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2. Или введите сумму в деньгах (например: 1000)
 
 "Минимальная продажа: 0.001 BTC"
-"""
+    ""
     )
     context.user_data["btc_action"] = "sell"
 
 async def btc_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""График курса BTC""""
+    "График курса BTC"
     query = update.callback_query
     await query.answer()
     
     global btc_price
     
-"# Генерируем "исторические" данные для графика"
+# Генерируем "исторические" данные для графика
     history = []
     current_price = btc_price
     
@@ -6054,7 +6032,7 @@ async def btc_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         historical_price = int(current_price * (1 + change))
         history.append(historical_price)
     
-"# Формируем текстовый график"
+# Формируем текстовый график
     chart_text = "📈 *ИСТОРИЯ КУРСА BTC*\n\n"
     
     for i, price in enumerate(reversed(history)):
@@ -6079,7 +6057,7 @@ async def btc_chart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка торговли BTC""""
+    "Обработка торговли BTC"
     user_id = update.effective_user.id
     user = await db.get_user(user_id)
     
@@ -6095,7 +6073,7 @@ async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         input_text = update.message.text
         
-"# Пытаемся понять, что ввел пользователь"
+# Пытаемся понять, что ввел пользователь
         if "." in input_text:  # Вероятно, количество BTC
             btc_amount = float(input_text)
             money_amount = int(btc_amount * btc_price)
@@ -6112,13 +6090,13 @@ async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Недостаточно средств!")
                 return
             
-"# Покупаем BTC"
+# Покупаем BTC
             user.balance -= money_amount
             user.btc += btc_amount
             
             await db.save_user(user)
             
-            result_text = f"""
+            result_text = f""
 "✅ *BTC КУПЛЕН!*"
 
 💰 Куплено: *{btc_amount:.4f} BTC*
@@ -6128,7 +6106,7 @@ async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📊 Курс покупки: 1 BTC = {format_number(btc_price)}
 "💡 Теперь вы можете хранить BTC или продать когда курс вырастет"
-"""
+    ""
         
         elif action == "sell":
             if btc_amount < 0.001:
@@ -6139,13 +6117,13 @@ async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Недостаточно BTC!")
                 return
             
-"# Продаем BTC"
+# Продаем BTC
             user.btc -= btc_amount
             user.balance += money_amount
             
             await db.save_user(user)
             
-            result_text = f"""
+            result_text = f""
 "✅ *BTC ПРОДАН!*"
 
 💰 Продано: *{btc_amount:.4f} BTC*
@@ -6155,12 +6133,12 @@ async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📊 Курс продажи: 1 BTC = {format_number(btc_price)}
 "💡 Вы успешно продали BTC по хорошему курсу!"
-"""
+    ""
         else:
             await update.message.reply_text("❌ Неизвестное действие!")
             return
         
-"# Очищаем данные контекста"
+# Очищаем данные контекста
         context.user_data.pop("btc_action", None)
         
         keyboard = [[InlineKeyboardButton("📊 На биржу", callback_data="btc_market")]]
@@ -6179,7 +6157,7 @@ async def process_btc_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ошибка при обработке запроса!")
 
 async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Админ-панель""""
+    "Админ-панель"
     query = update.callback_query
     await query.answer()
     
@@ -6189,14 +6167,14 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ У вас нет прав администратора!")
         return
     
-"# Получаем статистику"
+# Получаем статистику
     all_users = await db.get_all_users()
     total_users = len(all_users)
     total_balance = sum(user.balance for user in all_users)
     total_bank = sum(user.bank for user in all_users)
     total_btc = sum(user.btc for user in all_users)
     
-    admin_text = f"""
+    admin_text = f""
 "👑 *АДМИН ПАНЕЛЬ*"
 
 "📊 *СТАТИСТИКА БОТА:*"
@@ -6207,7 +6185,7 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📈 Курс BTC: *{format_number(btc_price)}*
 
 "⚙️ *УПРАВЛЕНИЕ:*"
-"""
+    ""
     
     keyboard = [
         [InlineKeyboardButton("👤 Поиск пользователя", callback_data="admin_find_user")],
@@ -6231,7 +6209,7 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_find_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Поиск пользователя для админа""""
+    "Поиск пользователя для админа"
     query = update.callback_query
     await query.answer()
     
@@ -6242,14 +6220,14 @@ async def admin_find_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-""👤 *ПОИСК ПОЛЬЗОВАТЕЛЯ*\n\n""
-""Введите ID пользователя или @username:","
+"👤 *ПОИСК ПОЛЬЗОВАТЕЛЯ*\n\n"
+"Введите ID пользователя или @username:","
         parse_mode=ParseMode.MARKDOWN
     )
     context.user_data["admin_action"] = "find_user"
 
 async def admin_give_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Выдать деньги пользователю""""
+    "Выдать деньги пользователю"
     query = update.callback_query
     await query.answer()
     
@@ -6260,14 +6238,14 @@ async def admin_give_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-""💰 *ВЫДАЧА ДЕНЕГ*\n\n""
-""Введите ID пользователя:","
+"💰 *ВЫДАЧА ДЕНЕГ*\n\n"
+"Введите ID пользователя:","
         parse_mode=ParseMode.MARKDOWN
     )
     context.user_data["admin_action"] = "give_money_id"
 
 async def admin_take_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Забрать деньги у пользователя""""
+    "Забрать деньги у пользователя"
     query = update.callback_query
     await query.answer()
     
@@ -6278,14 +6256,14 @@ async def admin_take_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-""💸 *ЗАБИРАНИЕ ДЕНЕГ*\n\n""
-""Введите ID пользователя:","
+"💸 *ЗАБИРАНИЕ ДЕНЕГ*\n\n"
+"Введите ID пользователя:","
         parse_mode=ParseMode.MARKDOWN
     )
     context.user_data["admin_action"] = "take_money_id"
 
 async def admin_give_btc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Выдать BTC пользователю""""
+    "Выдать BTC пользователю"
     query = update.callback_query
     await query.answer()
     
@@ -6296,14 +6274,14 @@ async def admin_give_btc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-""₿ *ВЫДАЧА BTC*\n\n""
-""Введите ID пользователя:","
+"₿ *ВЫДАЧА BTC*\n\n"
+"Введите ID пользователя:","
         parse_mode=ParseMode.MARKDOWN
     )
     context.user_data["admin_action"] = "give_btc_id"
 
 async def admin_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Забанить пользователя""""
+    "Забанить пользователя"
     query = update.callback_query
     await query.answer()
     
@@ -6314,14 +6292,14 @@ async def admin_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-""🚫 *БАН ПОЛЬЗОВАТЕЛЯ*\n\n""
-""Введите ID пользователя:","
+"🚫 *БАН ПОЛЬЗОВАТЕЛЯ*\n\n"
+"Введите ID пользователя:","
         parse_mode=ParseMode.MARKDOWN
     )
     context.user_data["admin_action"] = "ban_user"
 
 async def admin_unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Разбанить пользователя""""
+    "Разбанить пользователя"
     query = update.callback_query
     await query.answer()
     
@@ -6332,14 +6310,14 @@ async def admin_unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await query.edit_message_text(
-""✅ *РАЗБАН ПОЛЬЗОВАТЕЛЯ*\n\n""
-""Введите ID пользователя:","
+"✅ *РАЗБАН ПОЛЬЗОВАТЕЛЯ*\n\n"
+"Введите ID пользователя:","
         parse_mode=ParseMode.MARKDOWN
     )
     context.user_data["admin_action"] = "unban_user"
 
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Полная статистика бота""""
+    "Полная статистика бота"
     query = update.callback_query
     await query.answer()
     
@@ -6349,7 +6327,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ У вас нет прав администратора!")
         return
     
-"# Получаем полную статистику"
+# Получаем полную статистику
     all_users = await db.get_all_users()
     top_users = await db.get_top_users(10)
     
@@ -6361,11 +6339,11 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_loses = sum(user.loses for user in all_users)
     banned_users = sum(1 for user in all_users if user.is_banned)
     
-"# Новые пользователи за последние 24 часа"
+# Новые пользователи за последние 24 часа
     now = datetime.datetime.now()
     new_users_24h = sum(1 for user in all_users if (now - user.registered).total_seconds() < 86400)
     
-    stats_text = f"""
+    stats_text = f""
 "📊 *ПОЛНАЯ СТАТИСТИКА БОТА*"
 
 "👥 *ПОЛЬЗОВАТЕЛИ:*"
@@ -6388,7 +6366,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Винрейт: *{(total_wins / (total_wins + total_loses) * 100) if (total_wins + total_loses) > 0 else 0:.1f}%*
 
 "🏆 *ТОП-10 ИГРОКОВ:*"
-"""
+    ""
     
     for i, user in enumerate(top_users[:10], 1):
         total = user.balance + user.bank
@@ -6404,7 +6382,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_update_btc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обновить курс BTC""""
+    "Обновить курс BTC"
     query = update.callback_query
     await query.answer()
     
@@ -6419,7 +6397,7 @@ async def admin_update_btc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     btc_price = random.randint(10000, 150000)
     
     await query.edit_message_text(
-"f"🔄 *КУРС BTC ОБНОВЛЕН*\n\n""
+f"🔄 *КУРС BTC ОБНОВЛЕН*\n\n"
         f"📊 Старый курс: {format_number(old_price)}\n"
         f"📈 Новый курс: *{format_number(btc_price)}*\n"
         f"📉 Изменение: {((btc_price - old_price) / old_price * 100):.1f}%",
@@ -6427,7 +6405,7 @@ async def admin_update_btc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def process_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка действий админа""""
+    "Обработка действий админа"
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
@@ -6442,7 +6420,7 @@ async def process_admin_action(update: Update, context: ContextTypes.DEFAULT_TYP
             target_id = int(text)
             user = await db.get_user(target_id)
         except ValueError:
-"# Ищем по username"
+# Ищем по username
             target_id = None
             all_users = await db.get_all_users()
             for u in all_users:
@@ -6455,7 +6433,7 @@ async def process_admin_action(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ Пользователь не найден!")
             return
         
-        profile_text = f"""
+        profile_text = f""
 👑 *ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ* (Админ)
 
 🆔 ID: `{user.user_id}`
@@ -6472,7 +6450,7 @@ async def process_admin_action(update: Update, context: ContextTypes.DEFAULT_TYP
 
 📅 Регистрация: {user.registered.strftime('%d.%m.%Y %H:%M')}
 🚫 Статус: {"Забанен" if user.is_banned else "Активен"}
-"""
+    ""
         
         keyboard = [
             [InlineKeyboardButton("💰 Выдать деньги", callback_data=f"admin_give_{target_id}"),
@@ -6520,7 +6498,7 @@ async def process_admin_action(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("❌ Введите корректный ID!")
 
 async def process_admin_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка сумм для админ-действий""""
+    "Обработка сумм для админ-действий"
     user_id = update.effective_user.id
     
     if user_id not in ADMIN_IDS:
@@ -6552,7 +6530,7 @@ async def process_admin_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             await db.save_user(user)
             
             await update.message.reply_text(
-"f"✅ Деньги выданы!\n""
+f"✅ Деньги выданы!\n"
                 f"👤 Пользователь: {target_id}\n"
                 f"💰 Сумма: {format_number(amount)}\n"
                 f"💳 Новый баланс: {format_number(user.balance)}"
@@ -6575,7 +6553,7 @@ async def process_admin_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             await db.save_user(user)
             
             await update.message.reply_text(
-"f"✅ Деньги изъяты!\n""
+f"✅ Деньги изъяты!\n"
                 f"👤 Пользователь: {target_id}\n"
                 f"💰 Сумма: {format_number(amount)}\n"
                 f"💳 Новый баланс: {format_number(user.balance)}"
@@ -6594,7 +6572,7 @@ async def process_admin_amount(update: Update, context: ContextTypes.DEFAULT_TYP
             await db.save_user(user)
             
             await update.message.reply_text(
-"f"✅ BTC выданы!\n""
+f"✅ BTC выданы!\n"
                 f"👤 Пользователь: {target_id}\n"
                 f"₿ Количество: {btc_amount:.4f} BTC\n"
                 f"₿ Новый баланс BTC: {user.btc:.4f}"
@@ -6624,11 +6602,11 @@ async def process_admin_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработка текстовых сообщений""""
+    "Обработка текстовых сообщений"
     user_id = update.effective_user.id
     text = update.message.text
     
-"# Проверяем различные состояния пользователя"
+# Проверяем различные состояния пользователя
     if "roulette_type" in context.user_data:
         await process_roulette(update, context)
         context.user_data.pop("roulette_type", None)
@@ -6675,7 +6653,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data.pop("awaiting_promo", None)
     
     elif text.lower().startswith("/promo"):
-"# Обработка команды /promo"
+# Обработка команды /promo
         parts = text.split()
         if len(parts) >= 2:
             promo_code = parts[1].upper()
@@ -6683,7 +6661,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             await update.message.reply_text(
                 "🎫 *Использование:* /promo [КОД]\n\n"
-""Пример: `/promo WELCOME100`","
+"Пример: `/promo WELCOME100`","
                 parse_mode=ParseMode.MARKDOWN
             )
     
@@ -6708,7 +6686,7 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         user = await db.get_user(user_id)
         if user:
             await update.message.reply_text(
-"f"💰 *ВАШ БАЛАНС*\n\n""
+f"💰 *ВАШ БАЛАНС*\n\n"
                 f"💳 Баланс: *{format_number(user.balance)}*\n"
                 f"🏦 В банке: *{format_number(user.bank)}*\n"
                 f"₿ BTC: *{user.btc:.4f}*",
@@ -6741,9 +6719,9 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         user = await db.get_user(user_id)
         if user:
             await update.message.reply_text(
-""🤖 *VIBE BET БОТ*\n\n""
-""Используйте /menu для доступа ко всем функциям\n""
-""или /help для списка всех команд","
+"🤖 *VIBE BET БОТ*\n\n"
+"Используйте /menu для доступа ко всем функциям\n"
+"или /help для списка всех команд","
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")],
@@ -6752,29 +6730,29 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         else:
             await update.message.reply_text(
-""🎰 *Добро пожаловать в Vibe Bet!*\n\n""
-""Для начала игры нажмите /start","
+"🎰 *Добро пожаловать в Vibe Bet!*\n\n"
+"Для начала игры нажмите /start","
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🚀 Начать", callback_data="start")]
                 ])
             )
 
 async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-""""Обработчик кнопки помощи""""
+    "Обработчик кнопки помощи"
     query = update.callback_query
     await query.answer()
     await help_command(update, context)
 
 async def main():
-""""Главная функция запуска бота""""
-"# Подключаемся к базе данных"
+    "Главная функция запуска бота"
+# Подключаемся к базе данных
     await db.connect()
     logger.info("База данных подключена")
     
-"# Создаем приложение"
+# Создаем приложение
     application = Application.builder().token(TOKEN).build()
     
-"# Регистрируем обработчики команд"
+# Регистрируем обработчики команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", show_main_menu))
     application.add_handler(CommandHandler("help", help_command))
@@ -6786,7 +6764,7 @@ async def main():
     application.add_handler(CommandHandler("promo", activate_promo_command))
     application.add_handler(CommandHandler("top", show_main_menu))
     
-"# Регистрируем обработчики callback-запросов"
+# Регистрируем обработчики callback-запросов
     application.add_handler(CallbackQueryHandler(register_callback, pattern="^register$"))
     application.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="^check_subscription$"))
     application.add_handler(CallbackQueryHandler(show_main_menu, pattern="^main_menu$"))
@@ -6801,11 +6779,11 @@ async def main():
     application.add_handler(CallbackQueryHandler(activate_promo_callback, pattern="^activate_promo$"))
     application.add_handler(CallbackQueryHandler(my_promocodes, pattern="^my_promocodes$"))
     application.add_handler(CallbackQueryHandler(create_promo_admin, pattern="^create_promo_admin$"))
-"# Промокоды"
+# Промокоды
     application.add_handler(CallbackQueryHandler(create_promo_type, pattern="^create_promo_"))
     application.add_handler(CallbackQueryHandler(set_promo_expire, pattern="^expire_"))
 
-"# Игры"
+# Игры
     application.add_handler(CallbackQueryHandler(show_games_menu, pattern="^games_menu$"))
     application.add_handler(CallbackQueryHandler(games_stats, pattern="^games_stats$"))
     application.add_handler(CallbackQueryHandler(roulette_menu, pattern="^roulette_menu$"))
@@ -6834,32 +6812,32 @@ async def main():
     application.add_handler(CallbackQueryHandler(blackjack_hit, pattern="^blackjack_hit$"))
     application.add_handler(CallbackQueryHandler(blackjack_stand, pattern="^blackjack_stand$"))
     
-"# Банк и финансы"
+# Банк и финансы
     application.add_handler(CallbackQueryHandler(bank_menu, pattern="^bank_menu$"))
     application.add_handler(CallbackQueryHandler(bank_deposit, pattern="^bank_deposit$"))
     application.add_handler(CallbackQueryHandler(bank_withdraw, pattern="^bank_withdraw$"))
     application.add_handler(CallbackQueryHandler(bank_transfer, pattern="^bank_transfer$"))
     
-"# Работа"
+# Работа
     application.add_handler(CallbackQueryHandler(jobs_menu, pattern="^jobs_menu$"))
     application.add_handler(CallbackQueryHandler(select_job, pattern="^job_"))
     application.add_handler(CallbackQueryHandler(do_work, pattern="^do_work$"))
     application.add_handler(CallbackQueryHandler(work_stats, pattern="^work_stats$"))
     
-"# Ферма BTC"
+# Ферма BTC
     application.add_handler(CallbackQueryHandler(farm_menu, pattern="^farm_menu$"))
     application.add_handler(CallbackQueryHandler(farm_collect, pattern="^farm_collect$"))
     application.add_handler(CallbackQueryHandler(farm_buy_menu, pattern="^farm_buy_menu$"))
     application.add_handler(CallbackQueryHandler(buy_gpu, pattern="^buy_gpu_"))
     application.add_handler(CallbackQueryHandler(farm_stats, pattern="^farm_stats$"))
     
-"# Биржа BTC"
+# Биржа BTC
     application.add_handler(CallbackQueryHandler(btc_market, pattern="^btc_market$"))
     application.add_handler(CallbackQueryHandler(btc_buy, pattern="^btc_buy$"))
     application.add_handler(CallbackQueryHandler(btc_sell, pattern="^btc_sell$"))
     application.add_handler(CallbackQueryHandler(btc_chart, pattern="^btc_chart$"))
     
-"# Админ-панель"
+# Админ-панель
     application.add_handler(CallbackQueryHandler(admin_menu, pattern="^admin_menu$"))
     application.add_handler(CallbackQueryHandler(admin_find_user, pattern="^admin_find_user$"))
     application.add_handler(CallbackQueryHandler(admin_give_money, pattern="^admin_give_money$"))
@@ -6874,19 +6852,19 @@ async def main():
     application.add_handler(CallbackQueryHandler(create_promo_type, pattern="^create_promo_"))
     application.add_handler(CallbackQueryHandler(set_promo_expire, pattern="^expire_"))
     
-"# Обработчик текстовых сообщений для промокодов"
+# Обработчик текстовых сообщений для промокодов
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_promo_messages))
     
-"# Обработка текстовых сообщений"
+# Обработка текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
     
-"# Запуск бота"
+# Запуск бота
     logger.info("Бот запускается...")
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
     
-"# Бесконечный цикл"
+# Бесконечный цикл
     try:
         while True:
             await asyncio.sleep(3600)  # Обновляем курс BTC каждый час
@@ -6899,5 +6877,5 @@ async def main():
         await db.pool.close()
 
 if __name__ == '__main__':
-"# Запуск асинхронного приложения"
+# Запуск асинхронного приложения
     asyncio.run(main())

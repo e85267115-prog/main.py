@@ -422,14 +422,15 @@ class Database:
             conn.commit()
             print("✅ Таблицы базы данных созданы/проверены")
             
-        except Exception as e:
-            print(f"❌ Ошибка инициализации БД: {e}")
-        finally:
-            self.pool.putconn(conn)
-                async def get_user(self, user_id: int) -> Optional[User]:
-        """Получить пользователя из БД"""
-        if not self.pool:
-            return None
+            except Exception as e:
+        print(f"❌ Ошибка инициализации БД: {e}")
+    finally:
+        self.pool.putconn(conn)
+
+async def get_user(self, user_id: int) -> Optional[User]:
+    """Получить пользователя из БД"""
+    if not self.pool:
+        return None
         
         conn = self.pool.getconn()
         try:

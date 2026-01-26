@@ -603,7 +603,6 @@ async def check_ban(user_id: int) -> bool:
     return user.is_banned if user else False
 
 async def get_or_create_user(user_id: int, username: str = "") -> User:
-async def get_or_create_user(user_id: int, username: str = "") -> User:
     """Получить или создать пользователя"""
     if not db:
         # Режим без БД

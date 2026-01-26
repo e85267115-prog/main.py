@@ -426,78 +426,78 @@ class Database:
             print(f"❌ Ошибка инициализации БД: {e}")
         finally:
             self.pool.putconn(conn)
-    async def get_user(self, user_id: int) -> Optional[User]:
-    async def get_user(self, user_id: int) -> Optional[User]:
-    """Получить пользователя из БД"""
-    if not self.pool:
-        return None
     
-    conn = self.pool.getconn()
-    try:
-        cursor = conn.cursor(cursor_factory=extras.DictCursor)
-        cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
-        row = cursor.fetchone()
+    async def get_user(self, user_id: int) -> Optional[User]:
+        """Получить пользователя из БД"""
+        if not self.pool:
+            return None
         
-        if row:
-            return User.from_dict(dict(row))
-        return None
-        
-    except Exception as e:
-        print(f"❌ Ошибка получения пользователя {user_id}: {e}")
-        return None
-    finally:
-        self.pool.putconn(conn)
-
-async def save_user(self, user: User):
-    """Сохранение пользователя в БД"""
-    if not self.pool:
-        return
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor(cursor_factory=extras.DictCursor)
+            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                return User.from_dict(dict(row))
+            return None
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения пользователя {user_id}: {e}")
+            return None
+        finally:
+            self.pool.putconn(conn)
     
-    conn = self.pool.getconn()
-    try:
-        cursor = conn.cursor()
+    async def save_user(self, user: User):
+        """Сохранение пользователя в БД"""
+        if not self.pool:
+            return
         
-        values = (
-            user.user_id, user.username, user.balance, user.bank, user.btc,
-            user.level, user.exp, user.wins, user.loses, user.job,
-            user.last_work, user.last_bonus, user.registered,
-            user.last_daily_bonus, user.is_banned, user.referral_code,
-            user.referred_by, user.total_referrals, user.referral_earnings
-        )
-        
-        cursor.execute('''
-            INSERT INTO users (
-                user_id, username, balance, bank, btc, level, exp, wins, loses,
-                job, last_work, last_bonus, registered, last_daily_bonus, is_banned,
-                referral_code, referred_by, total_referrals, referral_earnings
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE SET
-                username = EXCLUDED.username,
-                balance = EXCLUDED.balance,
-                bank = EXCLUDED.bank,
-                btc = EXCLUDED.btc,
-                level = EXCLUDED.level,
-                exp = EXCLUDED.exp,
-                wins = EXCLUDED.wins,
-                loses = EXCLUDED.loses,
-                job = EXCLUDED.job,
-                last_work = EXCLUDED.last_work,
-                last_bonus = EXCLUDED.last_bonus,
-                last_daily_bonus = EXCLUDED.last_daily_bonus,
-                is_banned = EXCLUDED.is_banned,
-                referral_code = EXCLUDED.referral_code,
-                referred_by = EXCLUDED.referred_by,
-                total_referrals = EXCLUDED.total_referrals,
-                referral_earnings = EXCLUDED.referral_earnings
-        ''', values)
-        
-        conn.commit()
-        
-    except Exception as e:
-        print(f"❌ Ошибка сохранения пользователя {user.user_id}: {e}")
-        conn.rollback()
-    finally:
-        self.pool.putconn(conn)
+        conn = self.pool.getconn()
+        try:
+            cursor = conn.cursor()
+            
+            values = (
+                user.user_id, user.username, user.balance, user.bank, user.btc,
+                user.level, user.exp, user.wins, user.loses, user.job,
+                user.last_work, user.last_bonus, user.registered,
+                user.last_daily_bonus, user.is_banned, user.referral_code,
+                user.referred_by, user.total_referrals, user.referral_earnings
+            )
+            
+            cursor.execute('''
+                INSERT INTO users (
+                    user_id, username, balance, bank, btc, level, exp, wins, loses,
+                    job, last_work, last_bonus, registered, last_daily_bonus, is_banned,
+                    referral_code, referred_by, total_referrals, referral_earnings
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    balance = EXCLUDED.balance,
+                    bank = EXCLUDED.bank,
+                    btc = EXCLUDED.btc,
+                    level = EXCLUDED.level,
+                    exp = EXCLUDED.exp,
+                    wins = EXCLUDED.wins,
+                    loses = EXCLUDED.loses,
+                    job = EXCLUDED.job,
+                    last_work = EXCLUDED.last_work,
+                    last_bonus = EXCLUDED.last_bonus,
+                    last_daily_bonus = EXCLUDED.last_daily_bonus,
+                    is_banned = EXCLUDED.is_banned,
+                    referral_code = EXCLUDED.referral_code,
+                    referred_by = EXCLUDED.referred_by,
+                    total_referrals = EXCLUDED.total_referrals,
+                    referral_earnings = EXCLUDED.referral_earnings
+            ''', values)
+            
+            conn.commit()
+            
+        except Exception as e:
+            print(f"❌ Ошибка сохранения пользователя {user.user_id}: {e}")
+            conn.rollback()
+        finally:
+            self.pool.putconn(conn)
     
     async def get_user_farm(self, user_id: int) -> List[BTCFarm]:
         """Получение фермы пользователя"""
@@ -602,6 +602,7 @@ async def check_ban(user_id: int) -> bool:
     user = await db.get_user(user_id)
     return user.is_banned if user else False
 
+async def get_or_create_user(user_id: int, username: str = "") -> User:
 async def get_or_create_user(user_id: int, username: str = "") -> User:
     """Получить или создать пользователя"""
     if not db:

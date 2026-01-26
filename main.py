@@ -637,10 +637,10 @@ async def get_promo_code(self, code: str) -> Optional[PromoCode]:
         return None
 
 async def use_promo_code(self, code: str, user_id: int) -> Tuple[bool, str, Dict[str, Any]]:
-""""Использование промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ""""
+    """Использование промокода - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     try:
         async with self.get_connection() as conn:
-"# Проверяем, использовал ли уже пользователь этот промокод"
+            # Проверяем, использовал ли уже пользователь этот промокод
             used = await conn.fetchrow(
                 'SELECT id FROM promo_uses WHERE promo_code = $1 AND user_id = $2',
                 code, user_id
@@ -648,12 +648,12 @@ async def use_promo_code(self, code: str, user_id: int) -> Tuple[bool, str, Dict
             if used:
                 return False, "❌ Вы уже использовали этот промокод!", {}
             
-"# Получаем промокод"
+            # Получаем промокод
             row = await conn.fetchrow('SELECT * FROM promo_codes WHERE code = $1', code)
             if not row:
                 return False, "❌ Промокод не найден!", {}
             
-"# Создаем объект PromoCode"
+            # Создаем объект PromoCode
             promo = PromoCode(
                 code=row['code'],
                 promo_type=row['promo_type'],
@@ -666,31 +666,31 @@ async def use_promo_code(self, code: str, user_id: int) -> Tuple[bool, str, Dict
                 is_active=row['is_active']
             )
             
-"# Проверяем активность промокода"
+            # Проверяем активность промокода
             if not promo.is_active:
                 return False, "❌ Промокод неактивен!", {}
             
-"# Проверяем срок действия"
+            # Проверяем срок действия
             if promo.expires_at and promo.expires_at < datetime.datetime.now():
                 return False, "❌ Срок действия промокода истек!", {}
             
-"# Проверяем лимит использований"
+            # Проверяем лимит использований
             if promo.current_uses >= promo.max_uses:
                 return False, "❌ Лимит использований промокода исчерпан!", {}
             
-"# Обновляем счетчик использований"
+            # Обновляем счетчик использований
             await conn.execute(
                 'UPDATE promo_codes SET current_uses = current_uses + 1 WHERE code = $1',
                 code
             )
             
-"# Записываем использование"
+            # Записываем использование
             await conn.execute(
                 'INSERT INTO promo_uses (promo_code, user_id, used_at) VALUES ($1, $2, $3)',
                 code, user_id, datetime.datetime.now()
             )
             
-"# Возвращаем данные для начисления бонуса"
+            # Возвращаем данные для начисления бонуса
             return True, "✅ Промокод успешно активирован!", {
                 "type": promo.promo_type,
                 "value": promo.value

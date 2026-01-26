@@ -157,7 +157,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class User:
     user_id: int
-    username: str = "
+    username: str = ""
     balance: int = 10000
     bank: int = 0
     btc: float = 0.0
@@ -168,10 +168,10 @@ class User:
     job: Optional[str] = None
     last_work: Optional[datetime.datetime] = None
     last_bonus: Optional[datetime.datetime] = None
-    registered: datetime.datetime = field(default_factory=datetime.datetime.now)
+    registered: datetime.datetime = datetime.datetime.now()
     last_daily_bonus: Optional[datetime.datetime] = None
     is_banned: bool = False
-    referral_code: str = "
+    referral_code: str = ""
     referred_by: Optional[int] = None
     total_referrals: int = 0
     referral_earnings: int = 0
@@ -203,7 +203,7 @@ class User:
     def from_dict(cls, data: Dict[str, Any]) -> 'User':
         user = cls(
             user_id=data["user_id"],
-            username=data.get("username", "),
+            username=data.get("username", ""),
             balance=data.get("balance", 10000),
             bank=data.get("bank", 0),
             btc=data.get("btc", 0.0),
@@ -213,7 +213,7 @@ class User:
             loses=data.get("loses", 0),
             job=data.get("job"),
             is_banned=data.get("is_banned", False),
-            referral_code=data.get("referral_code", "),
+            referral_code=data.get("referral_code", ""),
             referred_by=data.get("referred_by"),
             total_referrals=data.get("total_referrals", 0),
             referral_earnings=data.get("referral_earnings", 0)

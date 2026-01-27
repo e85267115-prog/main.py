@@ -3911,11 +3911,11 @@ async def main():
     
     async def main():
     # У всех строк ниже должен быть отступ в 4 пробела
-    print("🤖 Бот запускается...")
-    print(f"👑 Админы: {ADMIN_IDS}")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print(f"💬 Чат: {CHAT_USERNAME}")
-    print(f"🌐 Flask server on port: {PORT}")
+     print("🤖 Бот запускается...")
+     print(f"👑 Админы: {ADMIN_IDS}")
+     print(f"📢 Канал: {CHANNEL_USERNAME}")
+     print(f"💬 Чат: {CHAT_USERNAME}")
+     print(f"🌐 Flask server on port: {PORT}")
     
     await app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
 

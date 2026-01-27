@@ -1094,6 +1094,221 @@ async def admin_exp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 EXP: {exp}/{target_user['exp_needed']}",
         parse_mode="HTML"
     )
+    # ========== НЕДОСТАЮЩИЕ ФУНКЦИИ ==========
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Справка по командам"""
+    help_text = (
+        "🎮 <b>Vibe Bet - Центр помощи</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "🎰 <b>СТАВКИ:</b>\n"
+        "• рул [сумма] [число/цвет] (кр, чер, зел)\n"
+        "• кости [сумма] [ставка] (равно, больше, меньше)\n"
+        "• футбол [сумма] [ставка] (гол, мимо)\n"
+        "• алмазы [сумма] [бомбы] (1 или 2)\n"
+        "• мины [сумма]\n\n"
+        "⛏️ <b>ЗАРАБОТОК:</b>\n"
+        "• работа — Копать клад (нужна лопата)\n"
+        "• ферма — Майнинг биткоина\n"
+        "• бонус — Ежечасная награда\n\n"
+        "⚙️ <b>ПРОЧЕЕ:</b>\n"
+        "• профиль, топ\n"
+        "• перевести [ID] [Сумма]\n"
+        "• промо [код] — Активация промо\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📞 Поддержка: @d066q"
+    )
+    await update.message.reply_text(help_text, parse_mode="HTML")
+
+async def top_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Топ игроков"""
+    if not users_db:
+        await update.message.reply_text("📊 Пока нет игроков в рейтинге!")
+        return
+    
+    # Сортируем по балансу
+    sorted_users = sorted(users_db.values(), key=lambda x: x["balance"], reverse=True)[:10]
+    
+    top_text = "🏆 <b>Топ игроков по балансу</b>\n━━━━━━━━━━━━━━━━━━\n"
+    
+    for i, user in enumerate(sorted_users, 1):
+        top_text += f"{i}. ID {user['id']}: {format_number(user['balance'])} $\n"
+    
+    top_text += "━━━━━━━━━━━━━━━━━━"
+    await update.message.reply_text(top_text, parse_mode="HTML")
+
+async def diamonds_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Игра Алмазы"""
+    args = context.args
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if len(args) < 2:
+        await update.message.reply_text(
+            "💎 <b>Vibe Алмазы</b>\n\n"
+            "📝 Формат: <code>алмазы [ставка] [бомбы]</code>\n\n"
+            "🎯 Правила:\n"
+            "• 1-2 бомбы на поле\n"
+            "• Выбирайте клетки без бомб\n"
+            "• За алмаз x2 ставки\n"
+            "• За бомбу - проигрыш\n\n"
+            "Пример: <code>алмазы 1000 1</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    bet_amount = parse_bet(args[0], user_id)
+    if not bet_amount or bet_amount > user["balance"]:
+        await update.message.reply_text("❌ Неверная ставка!")
+        return
+    
+    try:
+        bombs = int(args[1])
+        if bombs not in [1, 2]:
+            await update.message.reply_text("❌ Бомб может быть 1 или 2!")
+            return
+    except:
+        await update.message.reply_text("❌ Неверное количество бомб!")
+        return
+    
+    # Простая реализация
+    user["balance"] -= bet_amount
+    if random.random() > 0.3:  # 70% шанс выигрыша
+        win_amount = bet_amount * 2
+        user["balance"] += win_amount
+        user["wins"] += 1
+        result = f"💎 Найден алмаз! Выигрыш: {format_number(win_amount)} $"
+    else:
+        user["losses"] += 1
+        result = "💣 Попали на бомбу! Проигрыш"
+    
+    add_exp(user_id)
+    
+    await update.message.reply_text(
+        f"💎 <b>Vibe Алмазы</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💸 Ставка: {format_number(bet_amount)} $\n"
+        f"💣 Бомб: {bombs}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"{result}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Баланс: {format_number(user['balance'])} $",
+        parse_mode="HTML"
+    )
+
+async def mines_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Игра Мины"""
+    args = context.args
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if len(args) < 1:
+        await update.message.reply_text(
+            "💣 <b>Vibe Мины</b>\n\n"
+            "📝 Формат: <code>мины [ставка]</code>\n\n"
+            "🎯 Правила:\n"
+            "• Поле 5x5\n"
+            "• 5 мин на поле\n"
+            "• Открывайте клетки\n"
+            "• За каждую клетку x1.5\n"
+            "• На мине - проигрыш\n\n"
+            "Пример: <code>мины 1000</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    bet_amount = parse_bet(args[0], user_id)
+    if not bet_amount or bet_amount > user["balance"]:
+        await update.message.reply_text("❌ Неверная ставка!")
+        return
+    
+    # Простая реализация
+    user["balance"] -= bet_amount
+    cells_opened = random.randint(1, 5)
+    
+    if cells_opened < 5:  # Не попали на мину
+        win_amount = bet_amount * (1 + cells_opened * 0.5)
+        user["balance"] += win_amount
+        user["wins"] += 1
+        result = f"✅ Открыто {cells_opened} клеток! Выигрыш: {format_number(win_amount)} $"
+    else:
+        user["losses"] += 1
+        result = "💣 Попали на мину! Проигрыш"
+    
+    add_exp(user_id)
+    
+    await update.message.reply_text(
+        f"💣 <b>Vibe Мины</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💸 Ставка: {format_number(bet_amount)} $\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"{result}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Баланс: {format_number(user['balance'])} $",
+        parse_mode="HTML"
+    )
+
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Магазин"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    shop_text = (
+        "🛒 <b>Vibe Магазин</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "⛏️ Лопата: 5,000 $\n"
+        "• Увеличивает доход с работ\n\n"
+        "🔍 Металлоискатель: 20,000 $\n"
+        "• Увеличивает шанс найти BTC\n\n"
+        "🖥 Видеокарта: 50,000 $\n"
+        "• Для фермы (макс. 3)\n\n"
+        "📝 Покупка:\n"
+        "• <code>купить лопата</code>\n"
+        "• <code>купить детектор</code>\n"
+        "• <code>ферма купить</code>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Баланс: {format_number(user['balance'])} $"
+    )
+    
+    await update.message.reply_text(shop_text, parse_mode="HTML")
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик кнопок"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "check_sub":
+        if check_subscription(query.from_user.id):
+            await query.edit_message_text(
+                "✅ Отлично! Вы подписаны!\n\n"
+                "🎮 Теперь можете использовать все функции бота!\n"
+                "📝 Напишите <code>помощь</code> для списка команд.",
+                parse_mode="HTML"
+            )
+        else:
+            await query.edit_message_text(
+                "❌ Вы не подписаны на канал или чат!\n\n"
+                "Пожалуйста, подпишитесь и нажмите проверку снова.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📢 Канал", url="https://t.me/nvibee_bet")],
+                    [InlineKeyboardButton("💬 Чат", url="https://t.me/chatvibee_bet")],
+                    [InlineKeyboardButton("✅ Проверить", callback_data="check_sub")]
+                ])
+            )
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовых сообщений"""
+    text = update.message.text.lower()
+    
+    if text in ["привет", "hi", "hello"]:
+        await update.message.reply_text("👋 Привет! Напиши /start для начала!")
+    elif "купить" in text:
+        await shop(update, context)
+    else:
+        await update.message.reply_text(
+            "🤖 Я не понимаю эту команду.\n"
+            "📝 Напиши <code>помощь</code> для списка команд.",
+            parse_mode="HTML"
+    )
 # ========== ЗАПУСК БОТА ==========
 def main() -> None:
     """Запуск бота"""

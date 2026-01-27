@@ -3855,35 +3855,27 @@ async def daily_interest_task(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"❌ Ошибка при начислении процентов: {e}")
 
-import datetime
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-)
-
-# ==================== Основная функция ====================
-import asyncio
-import logging
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-)
-
-# ==================== ОСНОВНАЯ ФУНКЦИЯ ====================
+# ========== ОСНОВНАЯ ФУНКЦИЯ ==========
 async def main():
-    print("🤖 Бот запускается...")
-
-    # ---------------- Создаем приложение ----------------
+    """Основная функция запуска бота"""
+    # Проверяем наличие токена
+    if TOKEN == "ВАШ_ТОКЕН_БОТА":
+        print("❌ Установите токен бота в переменной окружения TOKEN")
+        return
+    
+    # Подключаемся к базе данных
+    if db:
+        try:
+            await db.connect()
+            print("✅ База данных подключена")
+        except Exception as e:
+            print(f"❌ Ошибка подключения к БД: {e}")
+            print("⚠️ Бот будет работать в режиме без сохранения данных")
+    
+    # Создаем приложение
     app = Application.builder().token(TOKEN).build()
-
-    # ---------------- Команды ----------------
+    
+    # Добавляем обработчики команд
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("profile", profile_command))
@@ -3899,26 +3891,40 @@ async def main():
     app.add_handler(CommandHandler("referral", referral))
     app.add_handler(CommandHandler("shop", shop))
     app.add_handler(CommandHandler("admin", admin_panel))
-
-    # ---------------- Callback ----------------
+    
+    # Добавляем обработчики callback-запросов
     app.add_handler(CallbackQueryHandler(callback_handler))
-
-    # ---------------- Текст ----------------
+    
+    # Добавляем обработчик текстовых сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    
+    # Настраиваем задачу для ежедневных процентов
+    job_queue = app.job_queue
+    if job_queue:
+        # Начисляем проценты каждый день в 21:00 UTC (00:00 МСК)
+        job_queue.run_daily(
+            daily_interest_task,
+            time=datetime.time(hour=21, minute=0),
+            days=(0, 1, 2, 3, 4, 5, 6)
+        )
+        print("✅ Задача ежедневных процентов настроена")
+    # ========== ЗАПУСК БОТА ==========
+def start_bot():
+    """Запуск Telegram бота"""
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO
+    )
 
-    # ---------------- Supabase (НЕ БЛОКИРУЕТ) ----------------
-    if db:
-        async def connect_db():
-            try:
-                await db.connect()
-                print("✅ Обнаружено подключение к Supabase")
-            except Exception as e:
-                print(f"❌ Ошибка подключения к БД: {e}")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
 
-        asyncio.create_task(connect_db())
 
-    print("✅ Все хэндлеры добавлены. Стартуем polling...")
-
-    # ---------------- Запуск ----------------
-    await app.run_polling()
-    print("✅ Бот остановлен")
+if __name__ == "__main__":
+    print("🤖 Запуск Telegram бота...")
+    start_bot()
+    

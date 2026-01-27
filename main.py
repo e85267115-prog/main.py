@@ -3909,35 +3909,86 @@ async def main():
         )
         print("✅ Задача ежедневных процентов настроена")
     
-    async def main():
-    # У всех строк ниже должен быть отступ в 4 пробела
-     print("🤖 Бот запускается...")
-     print(f"👑 Админы: {ADMIN_IDS}")
-     print(f"📢 Канал: {CHANNEL_USERNAME}")
-     print(f"💬 Чат: {CHAT_USERNAME}")
-     print(f"🌐 Flask server on port: {PORT}")
+    import asyncio
+import signal
+import logging
+from threading import Thread
+from flask import Flask
+
+# Глобальные переменные для управления состоянием
+bot_task = None
+flask_thread = None
+
+async def main():
+    print("🤖 Бот запускается...")
+    print(f"👑 Админы: {ADMIN_IDS}")
+    print(f"📢 Канал: {CHANNEL_USERNAME}")
+    print(f"💬 Чат: {CHAT_USERNAME}")
+    print(f"🌐 Flask server on port: {PORT}")
     
     await app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
 
-# ========== ЗАПУСК БОТА И FLASK ==========
-def start_bot():
-    """Запуск Telegram бота"""
+def run_flask():
+    """Запуск Flask сервера"""
+    flask_app = Flask(__name__)
+    
+    @flask_app.route('/')
+    def home():
+        return "Bot is running!"
+    
+    @flask_app.route('/health')
+    def health():
+        return {"status": "ok", "service": "telegram-bot"}
+    
+    flask_app.run(host='0.0.0.0', port=PORT, debug=False)
+
+async def shutdown(signal, loop):
+    """Корректное завершение работы"""
+    print(f"\n🛑 Получен сигнал {signal.name}, завершаем работу...")
+    
+    # Останавливаем бота
+    if app.running:
+        await app.stop()
+    
+    # Останавливаем event loop
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    [task.cancel() for task in tasks]
+    
+    print("👋 Ожидаем завершения задач...")
+    await asyncio.gather(*tasks, return_exceptions=True)
+    loop.stop()
+
+def start_async():
+    """Запуск асинхронного приложения"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Регистрируем обработчики сигналов
+    signals = (signal.SIGTERM, signal.SIGINT)
+    for s in signals:
+        loop.add_signal_handler(
+            s, lambda s=s: asyncio.create_task(shutdown(s, loop))
+        )
+    
+    try:
+        loop.create_task(main())
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("✅ Приложение завершено корректно")
+        loop.close()
+
+if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO
     )
     
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n👋 Бот остановлен")
-    except Exception as e:
-        print(f"❌ Критическая ошибка: {e}")
-
-if __name__ == "__main__":
+    # Запускаем Flask в отдельном потоке
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print(f"✅ Flask сервер запущен на порту {PORT}")
     
     print("🤖 Запуск Telegram бота...")
-    start_bot()
+    start_async()

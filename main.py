@@ -3909,77 +3909,66 @@ async def main():
         )
         print("✅ Задача ежедневных процентов настроена")
     
+import os
 import asyncio
 import logging
-from contextlib import asynccontextmanager
-from flask import Flask, jsonify
-from quart import Quart  # Асинхронная версия Flask
 from telegram.ext import Application
-import threading
 
-# Используем Quart вместо Flask для асинхронности
-app = Quart(__name__)
+# Конфигурация
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+PORT = int(os.getenv("PORT", 8080))
 
-# Инициализация бота
-bot_app = None
-
-@asynccontextmanager
-async def lifespan(app):
-    # Запуск при старте
-    await startup()
-    yield
-    # Остановка при завершении
-    await shutdown()
-
-async def startup():
-    """Инициализация при запуске"""
-    global bot_app
-    print("🚀 Запуск приложения...")
-    
-    # Инициализация бота
-    bot_app = Application.builder().token("YOUR_TOKEN").build()
-    
-    # Добавьте ваши handlers
-    # bot_app.add_handler(...)
-    
-    # Запускаем бота в фоновом режиме
-    asyncio.create_task(run_bot())
-    print("✅ Бот инициализирован")
-
-async def shutdown():
-    """Корректное завершение"""
-    if bot_app and bot_app.running:
-        await bot_app.stop()
-        await bot_app.shutdown()
-    print("👋 Приложение остановлено")
-
-async def run_bot():
-    """Запуск бота в фоне"""
+async def main():
+    """Основная функция бота"""
     print("🤖 Бот запускается...")
     print(f"📢 Канал: {CHANNEL_USERNAME}")
     print(f"💬 Чат: {CHAT_USERNAME}")
     
-    if bot_app:
-        await bot_app.initialize()
-        await bot_app.start()
-        await bot_app.updater.start_polling(
-            allowed_updates=['message', 'callback_query'],
-            drop_pending_updates=True
-        )
-        print("✅ Бот запущен и слушает обновления")
-
-@app.route('/')
-async def home():
-    return "🤖 Бот работает!"
-
-@app.route('/health')
-async def health():
-    bot_status = "running" if bot_app and bot_app.running else "stopped"
-    return jsonify({
-        "status": "ok",
-        "bot": bot_status,
-        "service": "telegram-bot"
-    })
+    # Создание приложения
+    application = Application.builder().token(TOKEN).build()
+    
+    # Добавьте ваши handlers
+    # from telegram.ext import CommandHandler
+    # async def start(update, context):
+    #     await update.message.reply_text("Привет!")
+    # application.add_handler(CommandHandler("start", start))
+    
+    # Инициализация
+    await application.initialize()
+    await application.start()
+    
+    # Начинаем получать обновления
+    await application.updater.start_polling(
+        drop_pending_updates=True,
+        allowed_updates=['message', 'callback_query']
+    )
+    
+    print("✅ Бот запущен и работает")
+    
+    # Бесконечный цикл (можно заменить на asyncio.Event)
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Остановка бота...")
+    finally:
+        # Корректная остановка
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8080)
+    # Настройка логирования
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO
+    )
+    
+    # Запуск бота
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        raise

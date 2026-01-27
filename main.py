@@ -3919,15 +3919,30 @@ async def main():
     print(f"💬 Чат: {CHAT_USERNAME}")
     print("=" * 50)
     
+    # Инициализируем и запускаем polling вручную
+    await app.initialize()
+    await app.start()
+    
+    # Запускаем updater
+    await app.updater.start_polling(
+        drop_pending_updates=True,
+        allowed_updates=['message', 'callback_query']
+    )
+    
+    print("✅ Бот запущен и слушает обновления")
+    
+    # Ждем вечно (или до прерывания)
     try:
-        await app.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            close_loop=False
-        )
-    except Exception as e:
-        print(f"❌ Ошибка при polling: {e}")
-        raise
+        while True:
+            await asyncio.sleep(3600)  # Спим 1 час
+    except asyncio.CancelledError:
+        print("🛑 Получен сигнал остановки...")
+    finally:
+        # Корректно останавливаем
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+        print("👋 Бот остановлен")
 
 # ========== ЗАПУСК БОТА ==========
 def run_bot():
@@ -3935,63 +3950,45 @@ def run_bot():
     # Настройка логирования
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-        handlers=[
-            logging.StreamHandler(),  # Вывод в консоль Railway
-            logging.FileHandler("bot.log")  # Логи в файл
-        ]
+        level=logging.INFO
     )
     
-    # Запуск
+    # Проверяем, есть ли уже запущенный event loop (Railway)
     try:
-        print("🚀 Запускаем бота...")
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n👋 Бот остановлен пользователем")
-    except Exception as e:
-        print(f"❌ Критическая ошибка: {e}")
-        # Логируем полную ошибку
-        import traceback
-        traceback.print_exc()
-        raise
-
-# ========== FLASK СЕРВЕР (ОПЦИОНАЛЬНО) ==========
-def run_flask():
-    """Запуск Flask сервера для health checks"""
-    from flask import Flask
-    
-    flask_app = Flask(__name__)
-    
-    @flask_app.route('/')
-    def home():
-        return "🤖 Telegram Bot is running on Railway!"
-    
-    @flask_app.route('/health')
-    def health():
-        return {"status": "ok", "service": "telegram-bot"}
-    
-    flask_app.run(host='0.0.0.0', port=PORT, debug=False)
+        loop = asyncio.get_running_loop()
+        print("🔄 Используем существующий event loop Railway...")
+        
+        # Запускаем main() в существующем loop
+        future = asyncio.ensure_future(main())
+        
+        # Ждем завершения
+        try:
+            loop.run_until_complete(future)
+        except KeyboardInterrupt:
+            print("\n👋 Бот остановлен по запросу пользователя")
+            # Отменяем задачу
+            future.cancel()
+            try:
+                loop.run_until_complete(future)
+            except asyncio.CancelledError:
+                pass
+                
+    except RuntimeError:
+        # Нет запущенного loop, создаем новый
+        print("🔄 Создаем новый event loop...")
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            print("\n👋 Бот остановлен")
+        except Exception as e:
+            print(f"❌ Критическая ошибка: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
-    # Проверяем наличие обязательных переменных
     print("🔍 Проверка окружения...")
     print(f"PORT: {PORT}")
     print(f"TOKEN установлен: {'ДА' if TOKEN and TOKEN != 'ВАШ_ТОКЕН_БОТА' else 'НЕТ'}")
     
-    # ТОЛЬКО ЕСЛИ НУЖЕН FLASK - раскомментируй эту часть
-    # Если на Railway есть health checks, они будут ходить на порт $PORT
-    
-    # Запускаем Flask в отдельном потоке (опционально)
-    # flask_thread = Thread(target=run_flask, daemon=True)
-    # flask_thread.start()
-    # print(f"✅ Flask сервер запущен на порту {PORT}")
-    
-    # ВАРИАНТ 1: Просто запускаем бота (без Flask)
     print("🤖 Запускаем Telegram бота...")
     run_bot()
-    
-    # ВАРИАНТ 2: Если нужны оба сервиса (не рекомендуется на Railway)
-    # from concurrent.futures import ThreadPoolExecutor
-    # with ThreadPoolExecutor(max_workers=2) as executor:
-    #     executor.submit(run_flask)
-    #     executor.submit(run_bot)

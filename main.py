@@ -3923,7 +3923,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Получаем токен из переменных окружения Railway
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
 # ========== ТВОИ ХЕНДЛЕРЫ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

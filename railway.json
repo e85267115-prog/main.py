@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python bot.py",
+    "startCommand": "python main.py",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE"
   }

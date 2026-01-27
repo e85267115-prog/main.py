@@ -3912,48 +3912,110 @@ async def main():
     
     import os
 import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+import logging
 from telegram.request import HTTPXRequest
+from telegram.ext import Application
 
-TOKEN = os.getenv("TOKEN")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Бот работает через прокси!")
-
+# ========== ЗАПУСК С ПРОКСИ ==========
 async def main():
-    print("🤖 Запуск с прокси...")
+    """Основная функция запуска с прокси"""
+    print("🤖 ЗАПУСК БОТА С ПРОКСИ НА RAILWAY")
     
-    # Настройка прокси через HTTPXRequest
+    if not TOKEN or TOKEN == "TOKEN":
+        print("❌ ОШИБКА: Токен не установлен!")
+        return
+    
+    # Настройка прокси с увеличенными таймаутами
     request = HTTPXRequest(
         connection_pool_size=8,
-        read_timeout=30.0,
-        write_timeout=30.0,
-        connect_timeout=30.0,
-        pool_timeout=30.0,
+        read_timeout=30.0,      # Увеличено для Railway
+        write_timeout=30.0,     # Увеличено для Railway
+        connect_timeout=30.0,   # Увеличено для Railway
+        pool_timeout=30.0,      # Увеличено для Railway
     )
     
     # Создаем приложение с кастомным request
-    application = Application.builder() \
+    app = Application.builder() \
         .token(TOKEN) \
         .request(request) \
         .build()
     
-    application.add_handler(CommandHandler("start", start))
+    # ========== ТВОИ ХЕНДЛЕРЫ ==========
+    # 1. Сначала команды (ВАЖНО: в таком порядке!)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("profile", profile_command))
+    app.add_handler(CommandHandler("balance", balance_command))
+    app.add_handler(CommandHandler("level", level_command))
+    app.add_handler(CommandHandler("games", games_menu))
+    app.add_handler(CommandHandler("job", work_menu))
+    app.add_handler(CommandHandler("work", work_perform))
+    app.add_handler(CommandHandler("farm", farm_menu))
+    app.add_handler(CommandHandler("bank", bank_menu))
+    app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("bonus", bonus))
+    app.add_handler(CommandHandler("referral", referral))
+    app.add_handler(CommandHandler("shop", shop))
+    app.add_handler(CommandHandler("admin", admin_panel))
     
-    print("✅ Приложение создано")
+    # 2. Потом callback-хендлеры
+    app.add_handler(CallbackQueryHandler(callback_handler))
     
-    # Инициализация и запуск
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(
+    # 3. В КОНЦЕ: обработчики сообщений
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    
+    # ========== ЗАПУСК ==========
+    print("✅ Хендлеры добавлены, запускаю бота...")
+    
+    # Инициализация и ручной запуск polling
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(
         drop_pending_updates=True,
-        timeout=30,
-        pool_timeout=30
+        timeout=30,          # Увеличено
+        pool_timeout=30,     # Увеличено
+        allowed_updates=['message', 'callback_query']
     )
     
-    print("📡 Бот запущен")
+    print("✅ Бот запущен и слушает обновления!")
     
+    # Держим бота живым
+    try:
+        while True:
+            await asyncio.sleep(3600)  # Спим 1 час
+    except asyncio.CancelledError:
+        print("🛑 Получен сигнал остановки...")
+    finally:
+        # Корректная остановка
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+        print("👋 Бот остановлен")
+
+def run_bot():
+    """Запуск бота"""
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO
+    )
+    
+    # Создаем новый event loop для Railway
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        loop.close()
+
+if __name__ == "__main__":
+    run_bot()
     try:
         while True:
             await asyncio.sleep(1)

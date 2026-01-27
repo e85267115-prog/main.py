@@ -3912,63 +3912,51 @@ async def main():
 import os
 import asyncio
 import logging
-from telegram.ext import Application
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Конфигурация
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Получаем токен из переменных окружения Railway
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-PORT = int(os.getenv("PORT", 8080))
 
+# ========== ТВОИ ХЕНДЛЕРЫ ==========
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик /start"""
+    await update.message.reply_text("🚀 Бот запущен! Привет!")
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Эхо-ответ на любые текстовые сообщения"""
+    await update.message.reply_text(f"Ты сказал: {update.message.text}")
+
+# ========== ЗАПУСК БОТА ==========
 async def main():
-    """Основная функция бота"""
-    print("🤖 Бот запускается...")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print(f"💬 Чат: {CHAT_USERNAME}")
+    """Основная функция"""
+    print("🤖 Запускаю бота...")
     
-    # Создание приложения
-    application = Application.builder().token(TOKEN).build()
+    if not TOKEN:
+        print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не установлен!")
+        print("👉 Добавьте его в Variables в Railway Dashboard")
+        return
     
-    # Добавьте ваши handlers
-    # from telegram.ext import CommandHandler
-    # async def start(update, context):
-    #     await update.message.reply_text("Привет!")
-    # application.add_handler(CommandHandler("start", start))
+    # Создаем приложение бота
+    app = Application.builder().token(TOKEN).build()
     
-    # Инициализация
-    await application.initialize()
-    await application.start()
-    
-    # Начинаем получать обновления
-    await application.updater.start_polling(
-        drop_pending_updates=True,
-        allowed_updates=['message', 'callback_query']
+    # Запускаем polling
+    print("✅ Бот запущен и слушает обновления...")
+    await app.run_polling(
+        drop_pending_updates=True,  # Игнорируем старые сообщения при запуске
+        allowed_updates=Update.ALL_TYPES
     )
-    
-    print("✅ Бот запущен и работает")
-    
-    # Бесконечный цикл (можно заменить на asyncio.Event)
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("\n🛑 Остановка бота...")
-    finally:
-        # Корректная остановка
-        await application.updater.stop()
-        await application.stop()
-        await application.shutdown()
 
+# Запускаем бота
 if __name__ == "__main__":
-    # Настройка логирования
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO
-    )
-    
-    # Запуск бота
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n👋 Бот остановлен")
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        raise

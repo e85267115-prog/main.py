@@ -34,7 +34,7 @@ TOKEN = os.environ.get("TOKEN")
 ADMIN_IDS = json.loads(os.environ.get("ADMIN_IDS", "[123456789]"))
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@nvibee_bet")
 CHAT_USERNAME = os.environ.get("CHAT_USERNAME", "@chatvibee_bet")
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = "postgresql://postgres.szomvpywmslegnrhxpszWa17110710Waa@aws-1-eu-west-2.pooler.supabase.com:6543/postgres"
 PORT = int(os.environ.get("PORT", 8000))
 # ========== FLASK ДЛЯ KEEP-ALIVE ==========
 flask_app = Flask(__name__)

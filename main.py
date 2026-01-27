@@ -3910,26 +3910,23 @@ async def main():
         print("✅ Задача ежедневных процентов настроена")
     
     async def main():
-    # Запускаем бота
+    # У всех строк ниже должен быть отступ в 4 пробела
     print("🤖 Бот запускается...")
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"📢 Канал: {CHANNEL_USERNAME}")
     print(f"💬 Чат: {CHAT_USERNAME}")
     print(f"🌐 Flask server on port: {PORT}")
     
-    # close_loop=False важно при использовании внутри asyncio.run()
     await app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
 
 # ========== ЗАПУСК БОТА И FLASK ==========
 def start_bot():
     """Запуск Telegram бота"""
-    # Настройка логирования
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO
     )
     
-    # Запуск
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
@@ -3938,11 +3935,9 @@ def start_bot():
         print(f"❌ Критическая ошибка: {e}")
 
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке для Railway
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
     print(f"✅ Flask сервер запущен на порту {PORT}")
     
-    # Запускаем бота
     print("🤖 Запуск Telegram бота...")
     start_bot()

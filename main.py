@@ -3910,85 +3910,62 @@ async def main():
         )
         print("✅ Задача ежедневных процентов настроена")
     
-    # Запускаем бота
-    print("=" * 50)
-    print("🤖 БОТ ЗАПУСКАЕТСЯ НА RAILWAY")
-    print("=" * 50)
-    print(f"👑 Админы: {ADMIN_IDS}")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print(f"💬 Чат: {CHAT_USERNAME}")
-    print("=" * 50)
+    import os
+import asyncio
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.request import HTTPXRequest
+
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ Бот работает через прокси!")
+
+async def main():
+    print("🤖 Запуск с прокси...")
     
-    # Инициализируем и запускаем polling вручную
-    await app.initialize()
-    await app.start()
-    
-    # Запускаем updater
-    await app.updater.start_polling(
-        drop_pending_updates=True,
-        allowed_updates=['message', 'callback_query']
+    # Настройка прокси через HTTPXRequest
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        connect_timeout=30.0,
+        pool_timeout=30.0,
     )
     
-    print("✅ Бот запущен и слушает обновления")
+    # Создаем приложение с кастомным request
+    application = Application.builder() \
+        .token(TOKEN) \
+        .request(request) \
+        .build()
     
-    # Ждем вечно (или до прерывания)
+    application.add_handler(CommandHandler("start", start))
+    
+    print("✅ Приложение создано")
+    
+    # Инициализация и запуск
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(
+        drop_pending_updates=True,
+        timeout=30,
+        pool_timeout=30
+    )
+    
+    print("📡 Бот запущен")
+    
     try:
         while True:
-            await asyncio.sleep(3600)  # Спим 1 час
-    except asyncio.CancelledError:
-        print("🛑 Получен сигнал остановки...")
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Остановка...")
     finally:
-        # Корректно останавливаем
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
-        print("👋 Бот остановлен")
-
-# ========== ЗАПУСК БОТА ==========
-def run_bot():
-    """Запуск Telegram бота"""
-    # Настройка логирования
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO
-    )
-    
-    # Проверяем, есть ли уже запущенный event loop (Railway)
-    try:
-        loop = asyncio.get_running_loop()
-        print("🔄 Используем существующий event loop Railway...")
-        
-        # Запускаем main() в существующем loop
-        future = asyncio.ensure_future(main())
-        
-        # Ждем завершения
-        try:
-            loop.run_until_complete(future)
-        except KeyboardInterrupt:
-            print("\n👋 Бот остановлен по запросу пользователя")
-            # Отменяем задачу
-            future.cancel()
-            try:
-                loop.run_until_complete(future)
-            except asyncio.CancelledError:
-                pass
-                
-    except RuntimeError:
-        # Нет запущенного loop, создаем новый
-        print("🔄 Создаем новый event loop...")
-        try:
-            asyncio.run(main())
-        except KeyboardInterrupt:
-            print("\n👋 Бот остановлен")
-        except Exception as e:
-            print(f"❌ Критическая ошибка: {e}")
-            import traceback
-            traceback.print_exc()
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
 
 if __name__ == "__main__":
-    print("🔍 Проверка окружения...")
-    print(f"PORT: {PORT}")
-    print(f"TOKEN установлен: {'ДА' if TOKEN and TOKEN != 'ВАШ_ТОКЕН_БОТА' else 'НЕТ'}")
-    
-    print("🤖 Запускаем Telegram бота...")
-    run_bot()
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")

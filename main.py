@@ -3908,6 +3908,103 @@ async def main():
             days=(0, 1, 2, 3, 4, 5, 6)
         )
         print("✅ Задача ежедневных процентов настроена")
+
+  #бд
+import os
+import json
+import time
+import logging
+import psycopg2
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# -------------------
+# Конфигурация
+# -------------------
+PORT = int(os.environ.get("PORT", 8000))
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+logger = logging.getLogger("railway-app")
+
+conn = None
+
+
+# -------------------
+# Подключение к БД
+# -------------------
+def connect_db(retries=5, delay=3):
+    global conn
+    for i in range(retries):
+        try:
+            logger.info("Connecting to database...")
+            conn = psycopg2.connect(
+                DATABASE_URL,
+                sslmode="require",
+                connect_timeout=10
+            )
+            conn.autocommit = True
+            logger.info("Database connected")
+            return
+        except Exception as e:
+            logger.error(f"DB connection failed ({i+1}/{retries}): {e}")
+            time.sleep(delay)
+    logger.critical("Could not connect to database after retries")
+    conn = None
+
+
+connect_db()
+
+
+# -------------------
+# HTTP Handler
+# -------------------
+class Handler(BaseHTTPRequestHandler):
+    def _json(self, status, data):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    def do_GET(self):
+        global conn
+
+        if self.path == "/" or self.path == "/health":
+            try:
+                if conn is None or conn.closed:
+                    connect_db()
+
+                cur = conn.cursor()
+                cur.execute("SELECT 1;")
+                cur.fetchone()
+
+                self._json(200, {
+                    "status": "ok",
+                    "service": "railway-python",
+                    "database": "connected"
+                })
+            except Exception as e:
+                logger.error(f"Healthcheck error: {e}")
+                self._json(500, {
+                    "status": "error",
+                    "database": "disconnected",
+                    "message": str(e)
+                })
+        else:
+            self._json(404, {"error": "Not found"})
+
+
+# -------------------
+# Запуск сервера
+# -------------------
+if __name__ == "__main__":
+    logger.info(f"Starting server on port {PORT}")
+    server = HTTPServer(("0.0.0.0", PORT), Handler)
+    server.serve_forever()
+    
     # ========== ЗАПУСК БОТА ==========
 def start_bot():
     """Запуск Telegram бота"""

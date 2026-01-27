@@ -3909,6 +3909,7 @@ async def main():
         )
         print("✅ Задача ежедневных процентов настроена")
     
+    async def main():
     # Запускаем бота
     print("🤖 Бот запускается...")
     print(f"👑 Админы: {ADMIN_IDS}")
@@ -3916,7 +3917,8 @@ async def main():
     print(f"💬 Чат: {CHAT_USERNAME}")
     print(f"🌐 Flask server on port: {PORT}")
     
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # close_loop=False важно при использовании внутри asyncio.run()
+    await app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
 
 # ========== ЗАПУСК БОТА И FLASK ==========
 def start_bot():
@@ -3944,4 +3946,3 @@ if __name__ == "__main__":
     # Запускаем бота
     print("🤖 Запуск Telegram бота...")
     start_bot()
-    

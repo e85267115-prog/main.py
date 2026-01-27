@@ -3911,52 +3911,26 @@ async def main():
     
 import os
 import asyncio
-import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler
 
-# Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Получаем токен из переменных окружения Railway
-TOKEN = os.getenv("TOKEN")
+async def start(update, context):
+    await update.message.reply_text("✅ Бот работает на Railway!")
 
-# ========== ТВОИ ХЕНДЛЕРЫ ==========
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик /start"""
-    await update.message.reply_text("🚀 Бот запущен! Привет!")
-
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Эхо-ответ на любые текстовые сообщения"""
-    await update.message.reply_text(f"Ты сказал: {update.message.text}")
-
-# ========== ЗАПУСК БОТА ==========
 async def main():
-    """Основная функция"""
-    print("🤖 Запускаю бота...")
+    print("Запуск бота...")
     
     if not TOKEN:
-        print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не установлен!")
-        print("👉 Добавьте его в Variables в Railway Dashboard")
+        print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден!")
+        print("Добавь его в Railway Dashboard → Variables")
         return
     
-    # Создаем приложение бота
     app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
     
-    # Запускаем polling
-    print("✅ Бот запущен и слушает обновления...")
-    await app.run_polling(
-        drop_pending_updates=True,  # Игнорируем старые сообщения при запуске
-        allowed_updates=Update.ALL_TYPES
-    )
+    print("✅ Бот запущен")
+    await app.run_polling()
 
-# Запускаем бота
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n👋 Бот остановлен")
+    asyncio.run(main())

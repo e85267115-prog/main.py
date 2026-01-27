@@ -3913,7 +3913,7 @@ import os
 import asyncio
 from telegram.ext import Application, CommandHandler
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
 async def start(update, context):
     await update.message.reply_text("✅ Бот работает на Railway!")

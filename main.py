@@ -3866,21 +3866,24 @@ from telegram.ext import (
 )
 
 # ==================== Основная функция ====================
+import asyncio
+import logging
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+)
+
+# ==================== ОСНОВНАЯ ФУНКЦИЯ ====================
 async def main():
     print("🤖 Бот запускается...")
-    
-    # Подключаем базу СРАЗУ (БЕЗ дополнительного сообщения)
-    if db:
-        try:
-            await db.connect()  # База сама выведет сообщение
-        except Exception as e:
-            print(f"⚠️ Не удалось подключиться к БД: {e}")
-            print("⚠️ Бот будет работать без базы данных")
-    
-    # Создаем приложение
+
+    # ---------------- Создаем приложение ----------------
     app = Application.builder().token(TOKEN).build()
 
-    # ---------------- Командные обработчики ----------------
+    # ---------------- Команды ----------------
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("profile", profile_command))
@@ -3897,28 +3900,25 @@ async def main():
     app.add_handler(CommandHandler("shop", shop))
     app.add_handler(CommandHandler("admin", admin_panel))
 
-    # ---------------- Callback-запросы ----------------
+    # ---------------- Callback ----------------
     app.add_handler(CallbackQueryHandler(callback_handler))
 
-    # ---------------- Текстовые сообщения ----------------
+    # ---------------- Текст ----------------
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
 
-    async def main():
-    print("🤖 Начало main()")
-    
-    # Пропускаем базу если проблема в ней
-    # if db: 
-    #     await db.connect()
-    
-    app = Application.builder().token(TOKEN).build()
-    
-    # ТОЛЬКО ОДИН ПРОСТОЙ ХЭНДЛЕР ДЛЯ ТЕСТА
-    async def test_start(update, context):
-        await update.message.reply_text("Бот работает!")
-    
-    app.add_handler(CommandHandler("start", test_start))
-    print("✅ Хэндлер добавлен")
-    
-    print("🚀 ЗАПУСКАЮ POLLING...")
+    # ---------------- Supabase (НЕ БЛОКИРУЕТ) ----------------
+    if db:
+        async def connect_db():
+            try:
+                await db.connect()
+                print("✅ Обнаружено подключение к Supabase")
+            except Exception as e:
+                print(f"❌ Ошибка подключения к БД: {e}")
+
+        asyncio.create_task(connect_db())
+
+    print("✅ Все хэндлеры добавлены. Стартуем polling...")
+
+    # ---------------- Запуск ----------------
     await app.run_polling()
-    print("❌ Этого не должно быть видно")
+    print("✅ Бот остановлен")

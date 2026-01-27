@@ -3909,34 +3909,25 @@ async def main():
         )
         print("✅ Задача ежедневных процентов настроена")
     
-    # ========== ЗАПУСК БОТА ==========
+    # Запускаем бота
+    print("🤖 Бот запускается...")
+    print(f"👑 Админы: {ADMIN_IDS}")
+    print(f"📢 Канал: {CHANNEL_USERNAME}")
+    print(f"💬 Чат: {CHAT_USERNAME}")
+    print(f"🌐 Flask server on port: {PORT}")
+    
+    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+# ========== ЗАПУСК БОТА И FLASK ==========
 def start_bot():
     """Запуск Telegram бота"""
+    # Настройка логирования
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO
     )
     
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-from threading import Thread
-import json
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/health":  # Railway проверяет именно этот путь
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok"}).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-def run_healthcheck_server():
-    server = HTTPServer(("0.0.0.0", 8000), Handler)
-    Thread(target=server.serve_forever, daemon=True).start()
-    run_healthcheck_server()
-    
+    # Запуск
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
@@ -3944,8 +3935,13 @@ def run_healthcheck_server():
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
 
-
 if __name__ == "__main__":
+    # Запускаем Flask в отдельном потоке для Railway
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print(f"✅ Flask сервер запущен на порту {PORT}")
+    
+    # Запускаем бота
     print("🤖 Запуск Telegram бота...")
     start_bot()
     

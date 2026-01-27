@@ -3859,8 +3859,9 @@ async def daily_interest_task(context: ContextTypes.DEFAULT_TYPE):
 async def main():
     """Основная функция запуска бота"""
     # Проверяем наличие токена
-    if TOKEN == "ВАШ_ТОКЕН_БОТА":
-        print("❌ Установите токен бота в переменной окружения TOKEN")
+    if TOKEN == "ВАШ_ТОКЕН_БОТА" or not TOKEN:
+        print("❌ Установите токен бота в переменной окружения TELEGRAM_BOT_TOKEN в Railway")
+        print("❌ Текущий токен:", "НЕ УСТАНОВЛЕН" if not TOKEN else TOKEN)
         return
     
     # Подключаемся к базе данных
@@ -3909,28 +3910,88 @@ async def main():
         )
         print("✅ Задача ежедневных процентов настроена")
     
-import os
-import asyncio
-from telegram.ext import Application, CommandHandler
-
-TOKEN = os.getenv("TOKEN")
-
-async def start(update, context):
-    await update.message.reply_text("✅ Бот работает на Railway!")
-
-async def main():
-    print("Запуск бота...")
+    # Запускаем бота
+    print("=" * 50)
+    print("🤖 БОТ ЗАПУСКАЕТСЯ НА RAILWAY")
+    print("=" * 50)
+    print(f"👑 Админы: {ADMIN_IDS}")
+    print(f"📢 Канал: {CHANNEL_USERNAME}")
+    print(f"💬 Чат: {CHAT_USERNAME}")
+    print("=" * 50)
     
-    if not TOKEN:
-        print("❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден!")
-        print("Добавь его в Railway Dashboard → Variables")
-        return
+    try:
+        await app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False
+        )
+    except Exception as e:
+        print(f"❌ Ошибка при polling: {e}")
+        raise
+
+# ========== ЗАПУСК БОТА ==========
+def run_bot():
+    """Запуск Telegram бота"""
+    # Настройка логирования
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+        handlers=[
+            logging.StreamHandler(),  # Вывод в консоль Railway
+            logging.FileHandler("bot.log")  # Логи в файл
+        ]
+    )
     
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
+    # Запуск
+    try:
+        print("🚀 Запускаем бота...")
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен пользователем")
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        # Логируем полную ошибку
+        import traceback
+        traceback.print_exc()
+        raise
+
+# ========== FLASK СЕРВЕР (ОПЦИОНАЛЬНО) ==========
+def run_flask():
+    """Запуск Flask сервера для health checks"""
+    from flask import Flask
     
-    print("✅ Бот запущен")
-    await app.run_polling()
+    flask_app = Flask(__name__)
+    
+    @flask_app.route('/')
+    def home():
+        return "🤖 Telegram Bot is running on Railway!"
+    
+    @flask_app.route('/health')
+    def health():
+        return {"status": "ok", "service": "telegram-bot"}
+    
+    flask_app.run(host='0.0.0.0', port=PORT, debug=False)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Проверяем наличие обязательных переменных
+    print("🔍 Проверка окружения...")
+    print(f"PORT: {PORT}")
+    print(f"TOKEN установлен: {'ДА' if TOKEN and TOKEN != 'ВАШ_ТОКЕН_БОТА' else 'НЕТ'}")
+    
+    # ТОЛЬКО ЕСЛИ НУЖЕН FLASK - раскомментируй эту часть
+    # Если на Railway есть health checks, они будут ходить на порт $PORT
+    
+    # Запускаем Flask в отдельном потоке (опционально)
+    # flask_thread = Thread(target=run_flask, daemon=True)
+    # flask_thread.start()
+    # print(f"✅ Flask сервер запущен на порту {PORT}")
+    
+    # ВАРИАНТ 1: Просто запускаем бота (без Flask)
+    print("🤖 Запускаем Telegram бота...")
+    run_bot()
+    
+    # ВАРИАНТ 2: Если нужны оба сервиса (не рекомендуется на Railway)
+    # from concurrent.futures import ThreadPoolExecutor
+    # with ThreadPoolExecutor(max_workers=2) as executor:
+    #     executor.submit(run_flask)
+    #     executor.submit(run_bot)

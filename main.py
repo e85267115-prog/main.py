@@ -2334,84 +2334,102 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     
     elif query.data == "back_to_farm":
-        await farm(update, context)
-        # ===ОБНОВЛЕННЫЙ MAIN() С ВСЕМИ ОБРАБОТЧИКАМИ===
+        
+# ========== ГЛАВНАЯ ФУНКЦИЯ ЗАПУСКА ==========
 def main() -> None:
-    """Запуск бота"""
-    request = HTTPXRequest(
-        connect_timeout=30.0,
-        read_timeout=30.0,
-        write_timeout=30.0,
-    )
+    """Запуск бота - ПОСЛЕ ВСЕХ ФУНКЦИЙ"""
+    print("🚀 Запуск бота Vibe Bet...")
     
-    app = Application.builder().token(TOKEN).request(request).build()
+    # Проверка токена
+    if not TOKEN:
+        print("❌ ОШИБКА: Токен не найден!")
+        print("Добавьте переменную TOKEN в Railway:")
+        print("1. Settings → Variables")
+        print("2. New Variable: Name=TOKEN, Value=ваш_токен")
+        return
     
-    # Регистрируем обработчики команд
-    # Основные команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("profile", profile))
-    app.add_handler(CommandHandler("balance", balance))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("top", top_players))
+    print(f"✅ Токен получен: {TOKEN[:10]}...")
     
-    # Игры
-    app.add_handler(CommandHandler("roulette", roulette))
-    app.add_handler(CommandHandler("dice", dice_game))
-    app.add_handler(CommandHandler("football", football))
-    app.add_handler(CommandHandler("crash", crash_game))
-    app.add_handler(CommandHandler("diamonds", diamonds_game))
-    app.add_handler(CommandHandler("mines", mines_game))
-    
-    # Экономика
-    app.add_handler(CommandHandler("work", work))
-    app.add_handler(CommandHandler("farm", farm))
-    app.add_handler(CommandHandler("bonus", daily_bonus))
-    app.add_handler(CommandHandler("bank", bank))
-    app.add_handler(CommandHandler("transfer", transfer))
-    app.add_handler(CommandHandler("shop", shop))
-    
-    # Промокоды
-    app.add_handler(CommandHandler("promo", promo))
-    app.add_handler(CommandHandler("createpromo", create_promo))
-    
-    # Админ команды
-    app.add_handler(CommandHandler("admin", admin))
-    app.add_handler(CommandHandler("hhh", admin_give))
-    app.add_handler(CommandHandler("hhhh", admin_give_btc))
-    app.add_handler(CommandHandler("lvl", admin_level))
-    app.add_handler(CommandHandler("exp", admin_exp))
-    
-    # Обработка callback-запросов
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(CallbackQueryHandler(work_handler, pattern="^work_"))
-    app.add_handler(CallbackQueryHandler(mines_handler, pattern="^mines_"))
-    app.add_handler(CallbackQueryHandler(diamonds_handler, pattern="^diamonds_"))
-    app.add_handler(CallbackQueryHandler(crash_handler, pattern="^crash_"))
-    app.add_handler(CallbackQueryHandler(farm_handler, pattern="^farm_"))
-    app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
-    
-    # Обработка текстовых сообщений
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
-    print("🤖 Бот запускается...")
-    print(f"👑 Админы: {ADMIN_IDS}")
-    print(f"📢 Канал: {CHANNEL_USERNAME}")
-    print(f"💬 Чат: {CHAT_USERNAME}")
-    print(f"💰 Начальный баланс: 10,000 $")
-    print(f"🎮 Игр реализовано: 6")
-    print(f"⛏️ Профессий: 4")
-    
-    # Запускаем бота
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        # Создаем приложение
+        request = HTTPXRequest(
+            connect_timeout=30.0,
+            read_timeout=30.0,
+            write_timeout=30.0,
+        )
+        
+        app = Application.builder().token(TOKEN).request(request).build()
+        
+        # ========== РЕГИСТРАЦИЯ ОСНОВНЫХ КОМАНД ==========
+        print("📝 Регистрация команд...")
+        
+        # Основные команды
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("profile", profile))
+        app.add_handler(CommandHandler("balance", balance))
+        app.add_handler(CommandHandler("help", help_command))
+        
+        # Игры
+        app.add_handler(CommandHandler("roulette", roulette))
+        app.add_handler(CommandHandler("dice", dice_game))
+        app.add_handler(CommandHandler("football", football))
+        app.add_handler(CommandHandler("crash", crash_game))
+        app.add_handler(CommandHandler("diamonds", diamonds_game))
+        app.add_handler(CommandHandler("mines", mines_game))
+        
+        # Экономика
+        app.add_handler(CommandHandler("work", work))
+        app.add_handler(CommandHandler("farm", farm))
+        app.add_handler(CommandHandler("bonus", daily_bonus))
+        app.add_handler(CommandHandler("bank", bank))
+        app.add_handler(CommandHandler("transfer", transfer))
+        app.add_handler(CommandHandler("shop", shop))
+        
+        # Промокоды
+        app.add_handler(CommandHandler("promo", promo))
+        app.add_handler(CommandHandler("createpromo", create_promo))
+        
+        # Админ команды
+        app.add_handler(CommandHandler("admin", admin))
+        app.add_handler(CommandHandler("hhh", admin_give))
+        app.add_handler(CommandHandler("hhhh", admin_give_btc))
+        app.add_handler(CommandHandler("lvl", admin_level))
+        app.add_handler(CommandHandler("exp", admin_exp))
+        
+        # Обработка callback-запросов (кнопок)
+        app.add_handler(CallbackQueryHandler(button_handler))
+        app.add_handler(CallbackQueryHandler(work_handler, pattern="^work_"))
+        app.add_handler(CallbackQueryHandler(mines_handler, pattern="^mines_"))
+        app.add_handler(CallbackQueryHandler(diamonds_handler, pattern="^diamonds_"))
+        app.add_handler(CallbackQueryHandler(crash_handler, pattern="^crash_"))
+        app.add_handler(CallbackQueryHandler(farm_handler, pattern="^farm_"))
+        app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
+        
+        # Обработка текстовых сообщений (русские команды)
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        
+        print("✅ Все обработчики зарегистрированы")
+        print("=" * 50)
+        print("🤖 Бот Vibe Bet успешно запущен!")
+        print(f"👑 Админы: {ADMIN_IDS}")
+        print(f"📢 Канал: {CHANNEL_USERNAME}")
+        print(f"💬 Чат: {CHAT_USERNAME}")
+        print("=" * 50)
+        print("⏳ Ожидание сообщений...")
+        print("📞 Отправьте /start в Telegram")
+        
+        # ЗАПУСК БОТА - БЕСКОНЕЧНЫЙ ЦИКЛ
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False
+        )
+        
+    except Exception as e:
+        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ: {e}")
+        import traceback
+        traceback.print_exc()
 
-# main.py (временная тестовая версия)
-import os
-print("✅ Бот запускается...")
-
-TOKEN = os.getenv("TOKEN")
-if TOKEN:
-    print(f"✅ Токен получен: {TOKEN[:5]}...")
-    print("🚀 Бот готов к работе!")
-else:
-    print("❌ Токен не найден!")
-    print("Добавьте переменную TOKEN в Railway Variables")
+# ========== ТОЧКА ВХОДА ==========
+if __name__ == "__main__":
+    main()

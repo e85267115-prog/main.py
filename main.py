@@ -212,7 +212,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━"
     )
     
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)  # ← ЭТОЙ СТРОКИ НЕ ХВАТАЛО!
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id

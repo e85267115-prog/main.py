@@ -2327,15 +2327,19 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"💰 Заработано всего: {format_number(total_earned)} $\n"
                 f"₿ Намайнено BTC: {total_btc:.6f}\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"💵 Баланс: {format_number(user['balance'])} $\n"
-                f"₿ Всего BTC: {user['btc']:.6f}",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=ParseMode.HTML
-            )
+            f"💵 Баланс: {format_number(user['balance'])} $\n"
+            f"₿ Всего BTC: {user['btc']:.6f}",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.HTML
+        )
     
     elif query.data == "back_to_farm":
-        
+        # 🔥 ВЫЗЫВАЕМ ФУНКЦИЮ ФЕРМЫ
+        await farm(update, context)
+
 # ========== ГЛАВНЫЙ ЗАПУСК ДЛЯ RENDER ==========
+def main() -> None:
+    """Запуск бота для Render.com"""
 def main() -> None:
     """Запуск бота для Render.com"""
     print("=" * 50)

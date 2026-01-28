@@ -1,4 +1,4 @@
-# ===ИМПОРТЫ И НАСТРОЙКИ===
+ф# ===ИМПОРТЫ И НАСТРОЙКИ===
 import os
 import re
 import json
@@ -2747,6 +2747,9 @@ def main() -> None:
         
         # Обработчик русских команд без /
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+        #универс обработ
+        app.add_handler(CallbackQueryHandler(button_handler))
         
         print("✅ Все обработчики зарегистрированы")
         print("=" * 50)

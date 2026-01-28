@@ -359,7 +359,7 @@ async def dice_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(result_message, parse_mode="HTML")
 # ========== ИГРА ФУТБОЛ ==========
 async def football(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Игра футбол"""
+    """Игра футбол с анимацией"""
     args = context.args
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -367,75 +367,204 @@ async def football(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 2:
         await update.message.reply_text(
             "⚽ <b>Vibe Футбол</b>\n\n"
-            "📝 Формат: <code>футбол [ставка] [ставка]</code>\n\n"
+            "📝 Формат: <code>/футбол [ставка] [ставка]</code>\n"
+            "          <code>футбол [ставка] [ставка]</code> (русский)\n\n"
             "🎯 Ставки:\n"
-            "• <code>гол</code> - x1.8\n"
-            "• <code>мимо</code> - x2.2\n\n"
-            "Пример: <code>футбол 500 гол</code>",
+            "• <code>гол</code> - игрок забьет гол (x1.8)\n"
+            "• <code>мимо</code> - игрок промахнется (x2.2)\n\n"
+            "Примеры:\n"
+            "• <code>/футбол 500 гол</code>\n"
+            "• <code>футбол 1000 мимо</code>",
             parse_mode="HTML"
         )
         return
     
     bet_amount = parse_bet(args[0], user_id)
     if not bet_amount or bet_amount > user["balance"]:
-        await update.message.reply_text("❌ Неверная ставка!")
+        await update.message.reply_text("❌ Неверная ставка или недостаточно средств!")
         return
     
     bet_type = args[1].lower()
     
-    # Рандомный эмодзи для футбола
-    field = ["⚽", "🥅", "👟", "🔄", "🎯", "❌", "✅", "🔥"]
-    result_emoji = random.choice(field)
+    if bet_type not in ["гол", "мимо"]:
+        await update.message.reply_text("❌ Неверный тип ставки! Используйте 'гол' или 'мимо'")
+        return
+    
+    # Снимаем ставку
+    user["balance"] -= bet_amount
+    
+    # Отправляем анимацию футбола
+    animation_msg = await update.message.reply_animation(
+        animation="CgACAgQAAx0CZzMxlAADgWXcA7pYY2D8lzGdmKjVf3wD1fhXAAKfBQAC3hIAUs1I1Q2DPTh4MAQ",  # ID анимации футбола из Telegram
+        caption=f"⚽ <b>Идет футбольный матч...</b>\n"
+                f"💸 Ставка: {format_number(bet_amount)} $\n"
+                f"🎯 Ваш выбор: {bet_type}",
+        parse_mode="HTML"
+    )
+    
+    # Ждем 3 секунды для эффекта ожидания
+    await asyncio.sleep(3)
     
     # Определяем результат (60% шанс на гол)
     is_goal = random.random() < 0.6
     
-    win = False
-    multiplier = 0
+    # Определяем мультипликаторы
+    multipliers = {
+        "гол": {"win": 1.8, "lose": 0},
+        "мимо": {"win": 2.2, "lose": 0}
+    }
     
-    if bet_type == "гол":
-        win = is_goal
-        multiplier = 1.8 if win else 0
-    elif bet_type == "мимо":
-        win = not is_goal
-        multiplier = 2.2 if win else 0
-    else:
-        await update.message.reply_text("❌ Неверный тип ставки!")
-        return
+    win = (bet_type == "гол" and is_goal) or (bet_type == "мимо" and not is_goal)
+    multiplier = multipliers[bet_type]["win"] if win else multipliers[bet_type]["lose"]
     
     # Вычисляем результат
-    win_amount = bet_amount * multiplier if win else 0
-    user["balance"] += win_amount - bet_amount
-    
     if win:
+        win_amount = int(bet_amount * multiplier)
+        user["balance"] += win_amount
         user["wins"] += 1
-        result_text = f"{result_emoji} ГОЛ!" if is_goal else f"{result_emoji} МИМО!"
+        
+        # Показываем анимацию гола
+        await animation_msg.delete()
+        await update.message.reply_animation(
+            animation="CgACAgQAAx0CZzMxlAACAS5mA7Jh3KkGV9R3KvDDAAGP3bEYMugAAoIFAAI9eGFT-Pu1hqJqS4IwBA",  # ID анимации гола
+            caption="🎉 ГООООЛ! ⚽",
+            parse_mode="HTML"
+        )
     else:
         user["losses"] += 1
-        result_text = f"{result_emoji} МИМО!" if is_goal else f"{result_emoji} ГОЛ!"
+        
+        # Показываем анимацию промаха
+        await animation_msg.delete()
+        await update.message.reply_animation(
+            animation="CgACAgQAAx0CZzMxlAACAS1mA7JbzhbCy0vh9sCzw3lVqP5T6AACgAUAAmFCYVMclk9g0U8njDIE",  # ID анимации промаха
+            caption="❌ МИМО! Мяч улетел в ворота...",
+            parse_mode="HTML"
+        )
     
     # Добавляем опыт
-    add_exp(user_id)
+    exp_gained = bet_amount // 1000
+    add_exp(user_id, exp_gained)
     
+    # Формируем результат
     result_message = (
         f"⚽ <b>Vibe Футбол</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"🎯 Игрок бьет... {result_emoji}\n"
-        f"💸 Ставка: <b>{format_number(bet_amount)} $</b>\n"
-        f"🎯 Выбор: <b>{bet_type}</b>\n"
+        f"🎯 Результат: <b>{'ГОЛ! ⚽' if is_goal else 'МИМО! ❌'}</b>\n"
+        f"💸 Ставка: {format_number(bet_amount)} $\n"
+        f"🎯 Ваш выбор: {bet_type} (x{multiplier if win else '0'})\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"{result_text}\n"
     )
     
     if win:
-        result_message += f"💰 Выигрыш: <b>{format_number(win_amount)} $</b> (x{multiplier})\n"
+        result_message += f"🎉 <b>ПОБЕДА!</b>\n"
+        result_message += f"💰 Выигрыш: {format_number(win_amount)} $\n"
+    else:
+        result_message += f"😔 <b>ПРОИГРЫШ</b>\n"
+        result_message += f"💸 Потеряно: {format_number(bet_amount)} $\n"
     
     result_message += (
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 Баланс: <b>{format_number(user['balance'])} $</b>"
+        f"⭐ Опыт: +{exp_gained}\n"
+        f"💰 Баланс: <b>{format_number(user['balance'])} $</b>\n"
+        f"📊 Побед/Поражений: {user['wins']}/{user['losses']}"
     )
     
-    await update.message.reply_text(result_message, parse_mode="HTML")
+    # Создаем кнопки для повторной игры
+    keyboard = [
+        [
+            InlineKeyboardButton("⚽ Снова (2x)", callback_data="football_again_2"),
+            InlineKeyboardButton("⚽ Снова (половина)", callback_data="football_again_half")
+        ],
+        [
+            InlineKeyboardButton("🎲 Другие игры", callback_data="games_menu")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    result_msg = await update.message.reply_text(
+        result_message,
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+    
+    # Сохраняем информацию о последней игре для повторения
+    context.user_data["last_football"] = {
+        "bet_amount": bet_amount,
+        "bet_type": bet_type,
+        "message_id": result_msg.message_id
+    }
+
+async def football_again(update: Update, context: ContextTypes.DEFAULT_TYPE, multiplier_type):
+    """Повтор игры в футбол с множителем"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    last_game = context.user_data.get("last_football")
+    if not last_game:
+        await query.edit_message_text("❌ Не найдена предыдущая игра!")
+        return
+    
+    # Вычисляем новую ставку
+    if multiplier_type == "2":
+        new_bet = last_game["bet_amount"] * 2
+    elif multiplier_type == "half":
+        new_bet = last_game["bet_amount"] // 2
+    else:
+        new_bet = last_game["bet_amount"]
+    
+    # Проверяем баланс
+    if new_bet < 10:
+        await query.answer("❌ Минимальная ставка 10 $", show_alert=True)
+        return
+    
+    if new_bet > user["balance"]:
+        await query.answer(f"❌ Недостаточно средств! Нужно {format_number(new_bet)} $", show_alert=True)
+        return
+    
+    # Устанавливаем новую ставку и запускаем игру
+    context.args = [str(new_bet), last_game["bet_type"]]
+    await query.message.delete()
+    await football(update, context)
+
+# Обновляем button_handler для обработки футбола:
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий инлайн кнопок"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data == "football_again_2":
+        await football_again(update, context, "2")
+    elif data == "football_again_half":
+        await football_again(update, context, "half")
+    elif data == "games_menu":
+        await show_games_menu(update, context)
+    # ... остальные обработчики ...
+
+async def show_games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает меню игр"""
+    keyboard = [
+        [InlineKeyboardButton("⚽ Футбол", callback_data="game_football"),
+         InlineKeyboardButton("🎲 Кости", callback_data="game_dice")],
+        [InlineKeyboardButton("🎡 Рулетка", callback_data="game_roulette"),
+         InlineKeyboardButton("📈 Краш", callback_data="game_crash")],
+        [InlineKeyboardButton("💎 Алмазы", callback_data="game_diamonds"),
+         InlineKeyboardButton("💣 Мины", callback_data="game_mines")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.callback_query.edit_message_text(
+        "🎮 <b>Игровой зал Vibe</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Выберите игру:",
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
 # ========== ИГРА КРАШ ==========
 async def crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Игра краш"""
@@ -506,140 +635,622 @@ async def crash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(result_message, parse_mode="HTML")
 # ========== РАБОТА ==========
 async def work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Работа для заработка"""
+    """Работа с этапами и интерактивным процессом"""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    # Виды работ
+    # Проверяем, не выполняется ли уже работа
+    current_job = user.get("current_job")
+    
+    if current_job and current_job.get("stage") < len(current_job["stages"]) - 1:
+        # Работа уже идет, показываем текущий этап
+        await show_job_stage(update, context, user, current_job)
+        return
+    
+    # Выбираем новую работу
     jobs = {
-        "👷 Кладоискатель": {"min": 10000, "max": 50000, "btc_chance": 0.09, "tool": "shovel"},
-        "💻 Хакер": {"min": 20000, "max": 100000, "btc_chance": 0.05, "tool": None},
-        "🚚 Курьер": {"min": 5000, "max": 20000, "btc_chance": 0.02, "tool": None},
-        "🍽 Официант": {"min": 3000, "max": 15000, "btc_chance": 0.01, "tool": None},
-        "🏗 Строитель": {"min": 15000, "max": 80000, "btc_chance": 0.03, "tool": "shovel"}
+        "👷 Кладоискатель": {
+            "min": 10000, 
+            "max": 50000, 
+            "btc_chance": 0.09, 
+            "tool": "shovel",
+            "stages": [
+                "🔍 Ищу место для раскопок...",
+                "⛏ Начинаю копать...",
+                "💎 Нашел древние артефакты!",
+                "💰 Продаю находки...",
+                "🏆 Работа завершена!"
+            ],
+            "bonus": 1.5 if user.get("shovel", 0) > 0 else 1.0
+        },
+        "💻 Хакер": {
+            "min": 20000, 
+            "max": 100000, 
+            "btc_chance": 0.05, 
+            "tool": None,
+            "stages": [
+                "💻 Подключаюсь к серверу...",
+                "🔐 Взламываю защиту...",
+                "💾 Скачиваю данные...",
+                "💰 Продаю информацию...",
+                "🏆 Работа завершена!"
+            ],
+            "bonus": 1.2
+        },
+        "🚚 Курьер": {
+            "min": 5000, 
+            "max": 20000, 
+            "btc_chance": 0.02, 
+            "tool": None,
+            "stages": [
+                "📦 Получаю посылку...",
+                "🚗 Еду к клиенту...",
+                "🏢 Поднимаюсь на этаж...",
+                "🤝 Передаю заказ...",
+                "🏆 Работа завершена!"
+            ],
+            "bonus": 1.1
+        },
+        "🍽 Официант": {
+            "min": 3000, 
+            "max": 15000, 
+            "btc_chance": 0.01, 
+            "tool": None,
+            "stages": [
+                "🧹 Убираю столы...",
+                "📝 Принимаю заказ...",
+                "🍳 Несу еду на кухню...",
+                "🍽 Подаю блюда...",
+                "🏆 Работа завершена!"
+            ],
+            "bonus": 1.0
+        },
+        "🏗 Строитель": {
+            "min": 15000, 
+            "max": 80000, 
+            "btc_chance": 0.03, 
+            "tool": "shovel",
+            "stages": [
+                "🏗 Подготавливаю площадку...",
+                "🧱 Кладу кирпичи...",
+                "🔨 Строю стены...",
+                "🎨 Крашу фасад...",
+                "🏆 Работа завершена!"
+            ],
+            "bonus": 1.3 if user.get("shovel", 0) > 0 else 1.0
+        },
+        "👨‍🔧 Механик": {
+            "min": 25000, 
+            "max": 120000, 
+            "btc_chance": 0.04,
+            "tool": None,
+            "stages": [
+                "🔧 Диагностирую проблему...",
+                "🛠 Разбираю двигатель...",
+                "⚙️ Заменяю детали...",
+                "🚘 Собираю все обратно...",
+                "🏆 Работа завершена!"
+            ],
+            "bonus": 1.25
+        }
     }
     
     # Выбираем случайную работу
     job_name, job_info = random.choice(list(jobs.items()))
     
-    # Проверка инструмента
-    if job_info["tool"] == "shovel" and user["shovel"] == 0:
-        earnings = random.randint(1000, 5000)  # Без инструмента меньше
-        tool_msg = "⛏ Без лопаты заработок меньше"
-    else:
-        earnings = random.randint(job_info["min"], job_info["max"])
-        tool_msg = ""
+    # Создаем новую работу
+    user["current_job"] = {
+        "name": job_name,
+        "info": job_info,
+        "stage": 0,
+        "start_time": time.time(),
+        "earnings": 0,
+        "btc_found": 0,
+        "completed": False
+    }
     
-    # Шанс найти BTC
-    found_btc = 0
-    if random.random() < job_info["btc_chance"]:
-        found_btc = round(random.uniform(0.0001, 0.001), 6)
-        user["btc"] += found_btc
-    
-    user["balance"] += earnings
-    
-    # Добавляем опыт
-    if add_exp(user_id):
-        await update.message.reply_text(
-            f"⭐ Поздравляем! Вы повысили уровень до {user['level']}!"
-        )
-    
-    result_message = (
-        f"{job_name}\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 Заработано: <b>{format_number(earnings)} $</b>\n"
-        f"{tool_msg}\n"
-    )
-    
-    if found_btc > 0:
-        result_message += f"₿ Найден BTC: <b>{found_btc:.6f}</b>\n"
-    
-    result_message += (
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 Баланс: <b>{format_number(user['balance'])} $</b>\n"
-        f"₿ BTC: <b>{user['btc']:.6f}</b>"
-    )
-    
-    await update.message.reply_text(result_message, parse_mode="HTML")
+    # Показываем первый этап
+    await show_job_stage(update, context, user, user["current_job"])
 
-# ========== ФЕРМА BTC ==========
-async def farm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ферма майнинга"""
+async def show_job_stage(update: Update, context: ContextTypes.DEFAULT_TYPE, user, job):
+    """Показывает текущий этап работы с кнопками"""
+    stage = job["stage"]
+    stages = job["info"]["stages"]
+    
+    # Создаем клавиатуру
+    keyboard = []
+    
+    if stage < len(stages) - 1:
+        # Если работа не завершена
+        next_stage_text = "➡️ Следующий этап"
+        keyboard.append([InlineKeyboardButton(next_stage_text, callback_data=f"work_next_{stage}")])
+        keyboard.append([InlineKeyboardButton("🏃 Пропустить этап (1000 $)", callback_data=f"work_skip_{stage}")])
+    else:
+        # Последний этап - завершение
+        keyboard.append([InlineKeyboardButton("💰 Завершить работу", callback_data="work_complete")])
+    
+    keyboard.append([InlineKeyboardButton("❌ Отменить работу", callback_data="work_cancel")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Формируем сообщение
+    message = (
+        f"💼 <b>{job['name']}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📊 Этап {stage + 1}/{len(stages)}\n"
+        f"⏳ {stages[stage]}\n\n"
+    )
+    
+    if stage > 0:
+        progress_bar = "█" * stage + "░" * (len(stages) - stage - 1)
+        message += f"📈 Прогресс: [{progress_bar}]\n\n"
+    
+    # Показываем потенциальный заработок
+    if stage == len(stages) - 1:
+        potential_earnings = random.randint(job["info"]["min"], job["info"]["max"])
+        potential_earnings = int(potential_earnings * job["info"]["bonus"])
+        message += f"💰 Потенциальный заработок: {format_number(potential_earnings)} $\n"
+        
+        if job["info"]["tool"] == "shovel" and user.get("shovel", 0) > 0:
+            message += f"⛏ Бонус с лопатой: +50%\n"
+    
+    message += f"━━━━━━━━━━━━━━━━━━"
+    
+    # Отправляем или обновляем сообщение
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            message,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            message,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+
+async def work_next_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Переход к следующему этапу работы"""
+    query = update.callback_query
+    await query.answer()
+    
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    if "buy" in context.args:
-        # Покупка видеокарты
-        if user["farm_cards"] >= 3:
-            await update.message.reply_text("❌ Лимит 3 видеокарты на человека!")
-            return
-        
-        card_price = 50000
-        if user["balance"] < card_price:
-            await update.message.reply_text(f"❌ Недостаточно средств! Нужно {format_number(card_price)} $")
-            return
-        
-        user["balance"] -= card_price
-        user["farm_cards"] += 1
-        
-        await update.message.reply_text(
-            f"🖥 <b>Видеокарта куплена!</b>\n\n"
-            f"💸 Стоимость: {format_number(card_price)} $\n"
-            f"📊 Всего карт: {user['farm_cards']}/3\n"
-            f"💰 Баланс: {format_number(user['balance'])} $",
-            parse_mode="HTML"
-        )
+    if not user.get("current_job"):
+        await query.edit_message_text("❌ Активная работа не найдена!")
         return
     
-    if "collect" in context.args:
-        # Сбор дохода
-        if user["farm_cards"] == 0:
-            await update.message.reply_text("❌ У вас нет видеокарт!")
-            return
-        
-        # Вычисляем доход
-        hours_passed = 1  # Упрощенная версия
-        income_per_card = 1000
-        total_income = user["farm_cards"] * income_per_card * hours_passed
-        
-        # Шанс на майнинг BTC
-        btc_mined = 0
-        btc_chance = 0.01 * user["farm_cards"]
-        if random.random() < btc_chance:
-            btc_mined = round(random.uniform(0.00001, 0.0001) * user["farm_cards"], 6)
-            user["btc"] += btc_mined
-        
-        user["balance"] += total_income
-        
-        await update.message.reply_text(
-            f"🖥 <b>Доход с фермы собран!</b>\n\n"
-            f"📊 Видеокарт: {user['farm_cards']}\n"
-            f"💰 Доход: {format_number(total_income)} $\n"
-            f"{f'₿ Намайнено BTC: {btc_mined:.6f}' if btc_mined > 0 else ''}\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"💰 Баланс: {format_number(user['balance'])} $\n"
-            f"₿ BTC: {user['btc']:.6f}",
-            parse_mode="HTML"
-        )
+    job = user["current_job"]
+    
+    # Переходим к следующему этапу
+    job["stage"] += 1
+    
+    # Добавляем небольшой бонус за каждый этап
+    stage_bonus = random.randint(100, 1000)
+    job["earnings"] += stage_bonus
+    
+    # Шанс найти BTC на этом этапе
+    if random.random() < job["info"]["btc_chance"] / len(job["info"]["stages"]):
+        btc_found = round(random.uniform(0.00001, 0.0001), 6)
+        job["btc_found"] += btc_found
+        user["btc"] += btc_found
+    
+    # Показываем следующий этап
+    await show_job_stage(update, context, user, job)
+
+async def work_complete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Завершение работы и получение награды"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if not user.get("current_job"):
+        await query.edit_message_text("❌ Активная работа не найдена!")
         return
+    
+    job = user["current_job"]
+    
+    # Рассчитываем заработок
+    base_earnings = random.randint(job["info"]["min"], job["info"]["max"])
+    total_earnings = int(base_earnings * job["info"]["bonus"])
+    total_earnings += job["earnings"]  # Добавляем бонусы с этапов
+    
+    # Бонус за инструменты
+    if job["info"]["tool"] == "shovel" and user.get("shovel", 0) > 0:
+        total_earnings = int(total_earnings * 1.5)
+    
+    # Начисляем деньги
+    user["balance"] += total_earnings
+    
+    # Добавляем опыт
+    exp_gained = total_earnings // 1000  # 1 EXP за каждые 1000$
+    add_exp(user_id, exp_gained)
+    
+    # Формируем сообщение с результатами
+    result_message = (
+        f"🎉 <b>Работа завершена!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💼 {job['name']}\n"
+        f"📊 Этапов выполнено: {job['stage'] + 1}\n"
+        f"💰 Заработано: <b>{format_number(total_earnings)} $</b>\n"
+    )
+    
+    if job["btc_found"] > 0:
+        result_message += f"₿ Найден BTC: <b>{job['btc_found']:.6f}</b>\n"
+    
+    result_message += f"━━━━━━━━━━━━━━━━━━\n"
+    
+    # Проверяем уровень
+    if exp_gained > 0:
+        result_message += f"⭐ Опыт: +{exp_gained}\n"
+    
+    result_message += (
+        f"💰 Баланс: <b>{format_number(user['balance'])} $</b>\n"
+        f"₿ BTC: <b>{user['btc']:.6f}</b>\n\n"
+        f"⏱️ Время выполнения: {int(time.time() - job['start_time'])} сек."
+    )
+    
+    # Удаляем текущую работу
+    del user["current_job"]
+    
+    # Создаем кнопку для новой работы
+    keyboard = [[InlineKeyboardButton("💼 Новая работа", callback_data="work_new")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        result_message,
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+
+async def work_skip_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пропуск этапа за деньги"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if not user.get("current_job"):
+        await query.edit_message_text("❌ Активная работа не найдена!")
+        return
+    
+    # Стоимость пропуска
+    skip_cost = 1000
+    
+    if user["balance"] < skip_cost:
+        await query.answer(f"❌ Недостаточно средств! Нужно {format_number(skip_cost)} $", show_alert=True)
+        return
+    
+    # Оплачиваем пропуск
+    user["balance"] -= skip_cost
+    job = user["current_job"]
+    
+    # Пропускаем этап
+    job["stage"] += 1
+    
+    # Показываем следующий этап
+    await show_job_stage(update, context, user, job)
+
+async def work_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена работы"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if user.get("current_job"):
+        del user["current_job"]
+    
+    keyboard = [[InlineKeyboardButton("💼 Начать работу", callback_data="work_new")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        "❌ Работа отменена.\n\nНажмите кнопку ниже, чтобы начать новую работу:",
+        reply_markup=reply_markup
+    )
+
+# Обновляем button_handler для работы с новыми callback:
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий инлайн кнопок"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data.startswith("work_next_"):
+        await work_next_stage(update, context)
+    elif data.startswith("work_skip_"):
+        await work_skip_stage(update, context)
+    elif data == "work_complete":
+        await work_complete(update, context)
+    elif data == "work_cancel":
+        await work_cancel(update, context)
+    elif data == "work_new":
+        await work(update, context)
+    # ... остальные обработчики ...
+# ========== ФЕРМА BTC ==========
+async def farm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ферма майнинга с инлайн кнопками"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    # Проверяем аргументы для команд из текста
+    if context.args:
+        args_text = ' '.join(context.args).lower()
+        if args_text == 'купить':
+            await farm_buy(update, context)
+            return
+        elif args_text == 'собрать':
+            await farm_collect(update, context)
+            return
+    
+    # Вычисляем доход
+    hours_passed = 1  # Здесь нужно добавить логику расчета времени
+    income_per_card = 1000
+    potential_income = user["farm_cards"] * income_per_card * hours_passed
+    
+    # Создаем инлайн клавиатуру
+    keyboard = []
+    
+    # Кнопка покупки (если есть место для карт)
+    if user["farm_cards"] < 3:
+        buy_text = f"🛒 Купить видеокарту ({format_number(50000)} $)"
+        keyboard.append([InlineKeyboardButton(buy_text, callback_data="farm_buy")])
+    
+    # Кнопка сбора дохода (если есть карты)
+    if user["farm_cards"] > 0:
+        collect_text = f"💰 Собрать доход (~{format_number(potential_income)} $)"
+        keyboard.append([InlineKeyboardButton(collect_text, callback_data="farm_collect")])
+    
+    # Кнопка улучшения
+    keyboard.append([InlineKeyboardButton("⚡ Улучшить ферму", callback_data="farm_upgrade")])
+    
+    # Кнопка статистики
+    keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="farm_stats")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
     # Информация о ферме
     farm_info = (
-        f"🖥 <b>Ферма BTC</b>\n"
+        f"🖥 <b>Vibe Ферма</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"📊 Видеокарт: {user['farm_cards']}/3\n"
-        f"💰 Доход с карты: 1к $/час\n"
-        f"₿ Шанс на BTC: {user['farm_cards']}%/час\n\n"
-        f"💸 Стоимость карты: 50к $\n\n"
-        f"📝 Команды:\n"
-        f"• <code>ферма купить</code> - купить видеокарту\n"
-        f"• <code>ферма собрать</code> - собрать доход\n"
+        f"💰 Доход с карты: 1,000 $/час\n"
+        f"₿ Шанс на BTC: {user['farm_cards']}%/час\n"
+        f"⏳ Доход готов: Да\n\n"
+        f"💸 Стоимость карты: 50,000 $\n"
+        f"⚡ Улучшение: +20% к доходу (100,000 $)\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"Выберите действие:"
+    )
+    
+    # Если это callback (обновление сообщения)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            farm_info,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+    else:
+        # Если это команда
+        await update.message.reply_text(
+            farm_info,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+
+async def farm_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Покупка видеокарты"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    card_price = 50000
+    
+    if user["farm_cards"] >= 3:
+        text = "❌ Лимит 3 видеокарты на человека!"
+        if update.callback_query:
+            await update.callback_query.answer(text, show_alert=True)
+            return
+        else:
+            await update.message.reply_text(text)
+            return
+    
+    if user["balance"] < card_price:
+        text = f"❌ Недостаточно средств! Нужно {format_number(card_price)} $"
+        if update.callback_query:
+            await update.callback_query.answer(text, show_alert=True)
+            return
+        else:
+            await update.message.reply_text(text)
+            return
+    
+    # Покупка
+    user["balance"] -= card_price
+    user["farm_cards"] += 1
+    
+    # Обновляем сообщение
+    keyboard = [
+        [InlineKeyboardButton("🛒 Купить еще", callback_data="farm_buy")],
+        [InlineKeyboardButton("💰 Собрать доход", callback_data="farm_collect")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="farm_back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    success_text = (
+        f"✅ <b>Видеокарта куплена!</b>\n\n"
+        f"💸 Стоимость: {format_number(card_price)} $\n"
+        f"📊 Всего карт: {user['farm_cards']}/3\n"
+        f"💰 Баланс: {format_number(user['balance'])} $\n\n"
+        f"Доход с фермы увеличен!"
+    )
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            success_text,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            success_text,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+
+async def farm_collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сбор дохода с фермы"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if user["farm_cards"] == 0:
+        text = "❌ У вас нет видеокарт!"
+        if update.callback_query:
+            await update.callback_query.answer(text, show_alert=True)
+            return
+        else:
+            await update.message.reply_text(text)
+            return
+    
+    # Вычисляем доход (здесь нужна логика времени)
+    hours_passed = 1  # Замените на реальный расчет времени
+    income_per_card = 1000
+    total_income = user["farm_cards"] * income_per_card * hours_passed
+    
+    # Шанс на майнинг BTC
+    btc_mined = 0
+    btc_chance = 0.01 * user["farm_cards"]
+    if random.random() < btc_chance:
+        btc_mined = round(random.uniform(0.00001, 0.0001) * user["farm_cards"], 6)
+        user["btc"] += btc_mined
+    
+    # Начисляем доход
+    user["balance"] += total_income
+    
+    # Обновляем сообщение
+    keyboard = [
+        [InlineKeyboardButton("🛒 Купить видеокарту", callback_data="farm_buy")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="farm_back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    btc_text = f"₿ Намайнено BTC: {btc_mined:.6f}\n" if btc_mined > 0 else ""
+    
+    success_text = (
+        f"💰 <b>Доход с фермы собран!</b>\n\n"
+        f"📊 Видеокарт: {user['farm_cards']}\n"
+        f"⏳ Время: {hours_passed} час(ов)\n"
+        f"💰 Доход: {format_number(total_income)} $\n"
+        f"{btc_text}"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"💰 Баланс: {format_number(user['balance'])} $\n"
         f"₿ BTC: {user['btc']:.6f}"
     )
     
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            success_text,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            success_text,
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+
+# Также нужно добавить обработку callback в button_handler:
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий инлайн кнопок"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data == "farm_buy":
+        await farm_buy(update, context)
+    elif data == "farm_collect":
+        await farm_collect(update, context)
+    elif data == "farm_back":
+        await farm(update, context)
+    elif data == "farm_upgrade":
+        await farm_upgrade(update, context)
+    elif data == "farm_stats":
+        await farm_stats(update, context)
+
+async def farm_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Улучшение фермы"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    upgrade_price = 100000
+    
+    if user["balance"] < upgrade_price:
+        text = f"❌ Недостаточно средств! Нужно {format_number(upgrade_price)} $"
+        await update.callback_query.answer(text, show_alert=True)
+        return
+    
+    # Улучшаем
+    user["balance"] -= upgrade_price
+    user["farm_upgrade"] = user.get("farm_upgrade", 0) + 1
+    
+    keyboard = [
+        [InlineKeyboardButton("💰 Собрать доход", callback_data="farm_collect")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="farm_back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    success_text = (
+        f"⚡ <b>Ферма улучшена!</b>\n\n"
+        f"💸 Стоимость: {format_number(upgrade_price)} $\n"
+        f"📊 Уровень улучшения: {user['farm_upgrade']}\n"
+        f"💰 Доход увеличен на 20%\n"
+        f"💰 Баланс: {format_number(user['balance'])} $"
+    )
+    
+    await update.callback_query.edit_message_text(
+        success_text,
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+
+async def farm_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Статистика фермы"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    keyboard = [
+        [InlineKeyboardButton("🔙 Назад", callback_data="farm_back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    stats_text = (
+        f"📊 <b>Статистика фермы</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🖥 Видеокарт: {user['farm_cards']}/3\n"
+        f"⚡ Уровень улучшения: {user.get('farm_upgrade', 0)}\n"
+        f"💰 Доход в час: {format_number(user['farm_cards'] * 1000)} $\n"
+        f"₿ BTC за все время: {user.get('btc_mined_total', 0):.6f}\n"
+        f"💵 Заработано всего: {format_number(user.get('farm_earned_total', 0))} $\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Баланс: {format_number(user['balance'])} $\n"
+        f"₿ BTC: {user['btc']:.6f}"
+    )
+    
+    await update.callback_query.edit_message_text(
+        stats_text,
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+    
     await update.message.reply_text(farm_info, parse_mode="HTML")
+    
 # ========== БАНК И ПЕРЕВОДЫ ==========
 async def bank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Управление банком"""
@@ -1309,6 +1920,51 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📝 Напиши <code>помощь</code> для списка команд.",
             parse_mode="HTML"
     )
+        async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка текстовых сообщений (русские команды)"""
+    user_id = update.effective_user.id
+    text = update.message.text.strip().lower()
+    
+    # Словарь русских команд
+    russian_commands = {
+        'старт': start,
+        'профиль': profile,
+        'баланс': balance,
+        'помощь': help_command,
+        'топ': top_players,
+        'рулетка': roulette,
+        'рул': roulette,
+        'кости': dice_game,
+        'футбол': football,
+        'краш': crash_game,
+        'алмазы': diamonds_game,
+        'мины': mines_game,
+        'работа': work,
+        'ферма': farm,
+        'бонус': daily_bonus,
+        'банк': bank,
+        'перевести': transfer,
+        'магазин': shop,
+        'промо': promo,
+        'админ': admin,
+    }
+    
+    if text in russian_commands:
+        await russian_commands[text](update, context)
+    else:
+        # Если это не команда, проверяем другие варианты
+        if text.startswith('краш'):
+            # Обработка ставок в краш через текст
+            parts = text.split()
+            if len(parts) >= 2:
+                await crash_game(update, context)
+        elif text.startswith('купить'):
+            await shop(update, context)
+        else:
+            await update.message.reply_text(
+                "🤖 Я не понимаю эту команду.\n"
+                "📝 Напиши /help для списка команд."
+    )
 # ========== ЗАПУСК БОТА ==========
 def main() -> None:
     """Запуск бота"""
@@ -1329,18 +1985,18 @@ def main() -> None:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("top", top_players))
     
-    # Игры
+    # Игры (только английские названия)
     app.add_handler(CommandHandler("roulette", roulette))
     app.add_handler(CommandHandler("dice", dice_game))
     app.add_handler(CommandHandler("football", football))
-    app.add_handler(CommandHandler("crash", crash))
+    app.add_handler(CommandHandler("crash", crash_game))
     app.add_handler(CommandHandler("diamonds", diamonds_game))
     app.add_handler(CommandHandler("mines", mines_game))
     
     # Экономика
     app.add_handler(CommandHandler("work", work))
     app.add_handler(CommandHandler("farm", farm))
-    app.add_handler(CommandHandler("bonus", bonus))
+    app.add_handler(CommandHandler("bonus", daily_bonus))
     app.add_handler(CommandHandler("bank", bank))
     app.add_handler(CommandHandler("transfer", transfer))
     app.add_handler(CommandHandler("shop", shop))
@@ -1359,7 +2015,7 @@ def main() -> None:
     # Обработка callback-запросов
     app.add_handler(CallbackQueryHandler(button_handler))
     
-    # Обработка текстовых сообщений (здесь можно оставить русский текст)
+    # Обработка текстовых сообщений (для русских "команд")
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     
     print("🤖 Бот запускается...")

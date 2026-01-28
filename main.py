@@ -278,6 +278,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• рул 5к 17\n"
             "• рул все чер"
         )
+        
         await update.message.reply_text(text, parse_mode=ParseMode.HTML)
         return
     

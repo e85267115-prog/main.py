@@ -2477,8 +2477,93 @@ def main() -> None:
         app.add_handler(CallbackQueryHandler(farm_handler, pattern="^farm_"))
         app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
         
-        # Обработка текстовых сообщений (русские команды)
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        # ========== ОБРАБОТЧИК РУССКИХ КОМАНД БЕЗ / ==========
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовых сообщений (команды без /)"""
+    text = update.message.text.lower().strip()
+    user_id = update.effective_user.id
+    
+    print(f"📨 Получен текст: '{text}' от {user_id}")
+    
+    # Разделяем команду и аргументы
+    parts = text.split()
+    if not parts:
+        return
+    
+    command = parts[0]
+    args = parts[1:] if len(parts) > 1 else []
+    
+    # Передаем аргументы в контекст
+    context.args = args
+    
+    # Основные команды без аргументов
+    if command == "профиль":
+        await profile(update, context)
+    elif command == "баланс":
+        await balance(update, context)
+    elif command == "уровень":
+        await level_command(update, context)
+    elif command == "топ":
+        await top_players(update, context)
+    elif command == "помощь":
+        await help_command(update, context)
+    elif command in ["старт", "start"]:
+        await start(update, context)
+    
+    # Игры (с аргументами)
+    elif command in ["рул", "рулетка"]:
+        await roulette(update, context)
+    elif command == "кости":
+        await dice_game(update, context)
+    elif command == "футбол":
+        await football(update, context)
+    elif command == "краш":
+        await crash(update, context)
+    elif command == "алмазы":
+        await diamonds_game(update, context)
+    elif command == "мины":
+        await mines_game(update, context)
+    
+    # Экономика
+    elif command == "работа":
+        await work(update, context)
+    elif command == "ферма":
+        await farm(update, context)
+    elif command == "бонус":
+        await bonus(update, context)
+    elif command == "банк":
+        await bank_command(update, context)
+    elif command == "перевести":
+        await transfer(update, context)
+    elif command == "магазин":
+        await shop(update, context)
+    
+    # Промокоды
+    elif command == "промо":
+        await promo(update, context)
+    elif command == "создатьпромо":
+        await create_promo(update, context)
+    
+    # Админ команды
+    elif command in ["выдать", "дать"] and user_id in ADMIN_IDS:
+        await admin_give(update, context)
+    elif command in ["забрать", "забрал"] and user_id in ADMIN_IDS:
+        await admin_take(update, context)
+    elif command in ["выдатьбит", "датьбит"] and user_id in ADMIN_IDS:
+        await admin_give_btc(update, context)
+    elif command in ["уровеньадмин", "уровеньадм"] and user_id in ADMIN_IDS:
+        await admin_level(update, context)
+    elif command in ["опытадмин", "опытадм"] and user_id in ADMIN_IDS:
+        await admin_exp(update, context)
+    elif command in ["админ", "admin"] and user_id in ADMIN_IDS:
+        await admin(update, context)
+    
+    # Если команда не распознана
+    else:
+        await update.message.reply_text(
+            "🤖 Я не понимаю эту команду.\n"
+            "📝 Напиши /help для списка команд."
+        )
         
         print("✅ Все обработчики зарегистрированы")
         print("=" * 50)

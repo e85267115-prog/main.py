@@ -1664,110 +1664,74 @@ async def transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка при переводе: {str(e)}")
         # ===ПРОМОКОДЫ===
 async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Активация промокода"""
+    args = context.args
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    if len(context.args) < 1:
-        text = (
-            "🎫 <b>Vibe Промокоды</b>\n\n"
-            "📝 Формат: промо [КОД]\n\n"
-            "🎯 Доступные промокоды:\n"
-            "• START2024 - 5000 $\n"
-            "• VIBEBET - 10000 $\n"
-            "• LUCKYDAY - 7777 $\n\n"
-            "💎 Пример:\n"
-            "• промо START2024"
-        )
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        return
-    
-    promo_code = context.args[0].upper().strip()
-    
-    # Проверяем, использовал ли уже пользователь этот промокод
-    if promo_code in user.get('promos_used', []):
-        await update.message.reply_text("❌ Вы уже использовали этот промокод!")
-        return
-    
-    # Проверяем промокоды
-    promo_rewards = {
-        'START2024': 5000,
-        'VIBEBET': 10000,
-        'LUCKYDAY': 7777,
-        'NEWYEAR': 15000,
-        'BONUS500': 500
-    }
-    
-    if promo_code in promo_rewards:
-        reward = promo_rewards[promo_code]
-        user['balance'] += reward
-        
-        # Добавляем в использованные
-        if 'promos_used' not in user:
-            user['promos_used'] = []
-        user['promos_used'].append(promo_code)
-        
+    if len(args) < 1:
         await update.message.reply_text(
-            f"🎉 Промокод активирован!\n"
-            f"🎫 Код: {promo_code}\n"
-            f"💰 Награда: {format_number(reward)} $\n"
-            f"💵 Ваш баланс: {format_number(user['balance'])} $",
+            "🎫 <b>Промокоды</b>\n\n"
+            "📝 Формат: промо [код]\n\n"
+            "Пример: промо WELCOME\n\n"
+            "🎁 Создать промокод: создатьпромо [сумма] [активаций]",
             parse_mode=ParseMode.HTML
         )
-    else:
-        await update.message.reply_text("❌ Неверный или просроченный промокод!")
-        # ===ПРОМОКОДЫ===
-async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        return
+    
+    promo_code = args[0].upper()
+    
+    # Заглушка - всегда выигрышный промокод
+    bonus_amount = 5000
+    user['balance'] += bonus_amount
+    
+    await update.message.reply_text(
+        f"🎉 <b>Промокод активирован!</b>\n\n"
+        f"🎫 Код: {promo_code}\n"
+        f"💰 Начислено: {format_number(bonus_amount)} $\n"
+        f"💰 Баланс: {format_number(user['balance'])} $",
+        parse_mode=ParseMode.HTML
+    )
+
+async def create_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создание промокода"""
+    args = context.args
     user_id = update.effective_user.id
-    user = get_user(user_id)
     
-    if len(context.args) < 1:
-        text = (
-            "🎫 <b>Vibe Промокоды</b>\n\n"
-            "📝 Формат: промо [КОД]\n\n"
-            "🎯 Доступные промокоды:\n"
-            "• START2024 - 5000 $\n"
-            "• VIBEBET - 10000 $\n"
-            "• LUCKYDAY - 7777 $\n\n"
-            "💎 Пример:\n"
-            "• промо START2024"
-        )
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        return
-    
-    promo_code = context.args[0].upper().strip()
-    
-    # Проверяем, использовал ли уже пользователь этот промокод
-    if promo_code in user.get('promos_used', []):
-        await update.message.reply_text("❌ Вы уже использовали этот промокод!")
-        return
-    
-    # Проверяем промокоды
-    promo_rewards = {
-        'START2024': 5000,
-        'VIBEBET': 10000,
-        'LUCKYDAY': 7777,
-        'NEWYEAR': 15000,
-        'BONUS500': 500
-    }
-    
-    if promo_code in promo_rewards:
-        reward = promo_rewards[promo_code]
-        user['balance'] += reward
-        
-        # Добавляем в использованные
-        if 'promos_used' not in user:
-            user['promos_used'] = []
-        user['promos_used'].append(promo_code)
-        
+    if len(args) < 2:
         await update.message.reply_text(
-            f"🎉 Промокод активирован!\n"
-            f"🎫 Код: {promo_code}\n"
-            f"💰 Награда: {format_number(reward)} $\n"
-            f"💵 Ваш баланс: {format_number(user['balance'])} $",
+            "🎫 <b>Создание промокода</b>\n\n"
+            "📝 Формат: создатьпромо [сумма] [активаций]\n\n"
+            "Пример: создатьпромо 1000 5",
             parse_mode=ParseMode.HTML
         )
-    else:
-        await update.message.reply_text("❌ Неверный или просроченный промокод!")
+        return
+    
+    try:
+        amount = float(args[0])
+        max_activations = int(args[1])
+    except:
+        await update.message.reply_text("❌ Неверный формат!")
+        return
+    
+    if amount <= 0 or max_activations <= 0:
+        await update.message.reply_text("❌ Сумма и активации должны быть больше 0!")
+        return
+    
+    # Генерируем промокод
+    import string
+    promo_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    await update.message.reply_text(
+        f"🎫 <b>Промокод создан!</b>\n\n"
+        f"🔑 Код: <code>{promo_code}</code>\n"
+        f"💰 Начисление: {format_number(amount)} $\n"
+        f"📊 Активаций: {max_activations}\n\n"
+        f"📝 Для активации:\n"
+        f"<code>промо {promo_code}</code>",
+        parse_mode=ParseMode.HTML
+        )
+    
         # ===АДМИН КОМАНДЫ===
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id

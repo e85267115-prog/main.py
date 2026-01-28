@@ -77,10 +77,10 @@ def get_user(user_id):
             'exp_needed': 4,
             'wins': 0,
             'losses': 0,
+            # Убираем лишнее из профиля
             'shovel': 0,
             'detector': 0,
             'farm_cards': 0,
-            'last_collect': None,
             'last_bonus': None,
             'last_work': None,
             'promos_used': [],
@@ -193,32 +193,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.HTML
             )
             
-            async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            # ========== КОМАНДЫ ПРОФИЛЯ ==========
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Профиль игрока - только основные данные"""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    text = (
+    profile_text = (
         f"👤 <b>Профиль {update.effective_user.first_name}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🆔 ID: <code>{user_id}</code>\n"
         f"💰 Баланс: <b>{format_number(user['balance'])} $</b>\n"
-        f"🏦 Депозит: <b>{format_number(user['deposit'])} $</b>\n"
-        f"₿ BTC: <b>{user['btc']:.6f}</b>\n"
         f"⭐ Уровень: <b>{user['level']}</b>\n"
         f"📊 EXP: <b>{user['exp']}/{user['exp_needed']}</b>\n"
         f"🏆 Побед/Поражений: <b>{user['wins']}/{user['losses']}</b>\n"
-        f"⛏️ Лопат: {user['shovel']} | Детекторов: {user['detector']}\n"
-        f"🖥️ Видеокарт: {user['farm_cards']}/3\n"
         f"━━━━━━━━━━━━━━━━━━"
     )
     
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)  # ← ЭТОЙ СТРОКИ НЕ ХВАТАЛО!
+    await update.message.reply_text(profile_text, parse_mode=ParseMode.HTML)
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Баланс игрока"""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    text = (
+    balance_text = (
         f"💰 <b>Ваш баланс</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"💵 На руках: <b>{format_number(user['balance'])} $</b>\n"
@@ -228,7 +227,9 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💸 Общий капитал: <b>{format_number(user['balance'] + user['deposit'] + user['btc'] * btc_price)} $</b>"
     )
     
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await update.message.reply_text(balance_text, parse_mode=ParseMode.HTML)
+    
+#помощь
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -677,13 +678,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     base_earnings = random.randint(job["min"], job["max"])
     earnings = base_earnings * stages_completed // job["stages"]
     
-    # Бонус за инструменты
-    if job["name"] == "👷 Кладоискатель":
-        if user['shovel'] > 0:
-            earnings = int(earnings * 1.5)
-        if user['detector'] > 0:
-            earnings = int(earnings * 1.3)
-    
     # Шанс найти BTC
     found_btc = 0
     if random.random() < job["btc_chance"]:
@@ -705,9 +699,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text += (
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"💰 Баланс: <b>{format_number(user['balance'])} $</b>\n"
-        f"₿ BTC: <b>{user['btc']:.6f}</b>"
+        f"💰 Баланс: <b>{format_number(user['balance'])} $</b>"
     )
+    
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     async def admin_give(update: Update, context: ContextTypes.DEFAULT_TYPE):

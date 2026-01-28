@@ -1323,34 +1323,34 @@ def main() -> None:
     
     # Регистрируем обработчики команд
     # Основные команды
-    app.add_handler(CommandHandler(["start", "старт"], start))
-    app.add_handler(CommandHandler(["profile", "профиль"], profile))
-    app.add_handler(CommandHandler(["balance", "баланс"], balance))
-    app.add_handler(CommandHandler(["help", "помощь"], help_command))
-    app.add_handler(CommandHandler(["top", "топ"], top_players))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("profile", profile))
+    app.add_handler(CommandHandler("balance", balance))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("top", top_players))
     
     # Игры
-    app.add_handler(CommandHandler(["roulette", "рулетка", "рул"], roulette))
-    app.add_handler(CommandHandler(["dice", "кости"], dice_game))
-    app.add_handler(CommandHandler(["football", "футбол"], football))
-    app.add_handler(CommandHandler(["crash", "краш"], crash))
-    app.add_handler(CommandHandler(["diamonds", "алмазы"], diamonds_game))
-    app.add_handler(CommandHandler(["mines", "мины"], mines_game))
+    app.add_handler(CommandHandler("roulette", roulette))
+    app.add_handler(CommandHandler("dice", dice_game))
+    app.add_handler(CommandHandler("football", football))
+    app.add_handler(CommandHandler("crash", crash))
+    app.add_handler(CommandHandler("diamonds", diamonds_game))
+    app.add_handler(CommandHandler("mines", mines_game))
     
     # Экономика
-    app.add_handler(CommandHandler(["work", "работа"], work))
-    app.add_handler(CommandHandler(["farm", "ферма"], farm))
-    app.add_handler(CommandHandler(["bonus", "бонус"], bonus))
-    app.add_handler(CommandHandler(["bank", "банк"], bank))
-    app.add_handler(CommandHandler(["transfer", "перевести"], transfer))
-    app.add_handler(CommandHandler(["shop", "магазин"], shop))
+    app.add_handler(CommandHandler("work", work))
+    app.add_handler(CommandHandler("farm", farm))
+    app.add_handler(CommandHandler("bonus", bonus))
+    app.add_handler(CommandHandler("bank", bank))
+    app.add_handler(CommandHandler("transfer", transfer))
+    app.add_handler(CommandHandler("shop", shop))
     
     # Промокоды
-    app.add_handler(CommandHandler(["promo", "промо"], promo))
-    app.add_handler(CommandHandler(["createpromo", "создатьпромо"], create_promo))
+    app.add_handler(CommandHandler("promo", promo))
+    app.add_handler(CommandHandler("createpromo", create_promo))
     
     # Админ команды
-    app.add_handler(CommandHandler(["admin", "админ"], admin))
+    app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("hhh", admin_give))
     app.add_handler(CommandHandler("hhhh", admin_give_btc))
     app.add_handler(CommandHandler("lvl", admin_level))
@@ -1359,7 +1359,7 @@ def main() -> None:
     # Обработка callback-запросов
     app.add_handler(CallbackQueryHandler(button_handler))
     
-    # Обработка текстовых сообщений
+    # Обработка текстовых сообщений (здесь можно оставить русский текст)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     
     print("🤖 Бот запускается...")

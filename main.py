@@ -2742,7 +2742,6 @@ def main() -> None:
         app.add_handler(CallbackQueryHandler(mines_handler, pattern="^mines_"))
         app.add_handler(CallbackQueryHandler(diamonds_handler, pattern="^diamonds_"))
         app.add_handler(CallbackQueryHandler(crash_handler, pattern="^crash_"))
-        app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
         
         # Обработчик русских команд без /
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

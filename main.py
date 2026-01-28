@@ -2188,6 +2188,45 @@ async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "farm_menu":
         await farm(update, context)
+        
+        # ===ФЕРМА BTC===
+async def farm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню фермы BTC"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    # Создаем клавиатуру
+    keyboard = [
+        [InlineKeyboardButton("🛒 Купить видеокарту (50к $)", callback_data="farm_buy")],
+        [InlineKeyboardButton("💰 Собрать доход", callback_data="farm_collect")],
+        [InlineKeyboardButton("📊 Статистика фермы", callback_data="farm_stats")]
+    ]
+    
+    farm_text = (
+        f"🖥️ <b>Ферма BTC</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📊 Видеокарт: {user['farm_cards']}/3\n"
+        f"💰 Доход с карты: 1,000 $/час\n"
+        f"₿ Шанс на BTC: {user['farm_cards']}%/час\n"
+        f"💸 Стоимость карты: 50,000 $\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Баланс: {format_number(user['balance'])} $\n"
+        f"₿ BTC: {user['btc']:.6f}"
+    )
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            farm_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.HTML
+        )
+    else:
+        await update.message.reply_text(
+            farm_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=ParseMode.HTML
+        )
+        
         # ===ОБРАБОТЧИК ФЕРМЫ (ПОЛНАЯ ВЕРСИЯ)===
 async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

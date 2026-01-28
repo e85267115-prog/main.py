@@ -2563,7 +2563,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🤖 Я не понимаю эту команду.\n"
             "📝 Напиши /help для списка команд."
-        )
+    )
         
         print("✅ Все обработчики зарегистрированы")
         print("=" * 50)

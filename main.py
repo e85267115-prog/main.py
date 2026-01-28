@@ -249,7 +249,121 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.HTML
         )
-        # ===ИГРА В КОСТИ С АНИМАЦИЕЙ===
+            # ===ИГРА РУЛЕТКА===
+async def roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+
+    if len(args) < 2:
+        text = (
+            "🎰 <b>Vibe Рулетка</b>\n\n"
+            "📝 Формат: рул [сумма] [ставка]\n\n"
+            "🎯 Ставки:\n"
+            "• Число 0-36 (x36)\n"
+            "• кр — красный (x2)\n"
+            "• чер — черный (x2)\n"
+            "• чет — четное (x2)\n"
+            "• нечет — нечетное (x2)\n"
+            "• 1-12, 13-24, 25-36 (x3)\n\n"
+            "💎 Примеры:\n"
+            "• рул 1000 кр\n"
+            "• рул 5к 17\n"
+            "• рул все чер"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return
+
+    bet_amount = parse_bet(args[0], user_id)
+    if not bet_amount or bet_amount <= 0:
+        await update.message.reply_text("❌ Неверная сумма ставки!")
+        return
+
+    if user['balance'] < bet_amount:
+        await update.message.reply_text("❌ Недостаточно средств!")
+        return
+
+    bet_type = args[1].lower()
+    win_number = random.randint(0, 36)
+
+    # Определяем цвет числа
+    red_numbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
+    is_red = win_number in red_numbers and win_number != 0
+    is_black = win_number not in red_numbers and win_number != 0
+    is_even = win_number % 2 == 0 and win_number != 0
+    is_odd = win_number % 2 == 1
+
+    # Проверяем выигрыш
+    multiplier = 0
+    win = False
+
+    if bet_type.isdigit() and 0 <= int(bet_type) <= 36:
+        # Ставка на число - x36
+        if int(bet_type) == win_number:
+            multiplier = 36
+            win = True
+    elif bet_type == "кр":
+        if is_red:
+            multiplier = 2
+            win = True
+    elif bet_type == "чер":
+        if is_black:
+            multiplier = 2
+            win = True
+    elif bet_type == "чет":
+        if is_even:
+            multiplier = 2
+            win = True
+    elif bet_type == "нечет":
+        if is_odd:
+            multiplier = 2
+            win = True
+    elif bet_type in ["1-12", "13-24", "25-36"]:
+        range_start = int(bet_type.split("-")[0])
+        range_end = int(bet_type.split("-")[1])
+        if range_start <= win_number <= range_end:
+            multiplier = 3
+            win = True
+    else:
+        await update.message.reply_text("❌ Неизвестный тип ставки!")
+        return
+
+    # Вычисляем результат
+    win_amount = int(bet_amount * multiplier) if win else 0
+    
+    # Обновляем баланс
+    user['balance'] += win_amount - bet_amount
+
+    if win:
+        user['wins'] += 1
+        result_text = f"🎉 ВЫИГРЫШ! +{format_number(win_amount)} $ (x{multiplier})"
+    else:
+        user['losses'] += 1
+        result_text = f"❌ ПРОИГРЫШ! -{format_number(bet_amount)} $"
+
+    # Формируем сообщение
+    color = "красный" if is_red else "черный" if is_black else "зеленый"
+    parity = "четное" if is_even else "нечетное" if win_number != 0 else "ноль"
+
+    result_message = (
+        f"🎰 <b>Vibe Рулетка</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🎯 Выпало: <b>{win_number}</b> ({color}, {parity})\n"
+        f"💰 Ставка: <b>{format_number(bet_amount)} $</b>\n"
+        f"🎯 Ваш выбор: <b>{bet_type}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"{result_text}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💵 Баланс: <b>{format_number(user['balance'])} $</b>"
+    )
+
+    await update.message.reply_text(result_message, parse_mode=ParseMode.HTML)
+    
+    # Добавляем опыт
+    if add_exp(user_id):
+        await update.message.reply_text(f"⭐ Уровень повышен! Теперь у вас {user['level']} уровень!")
+        
+# ===ИГРА В КОСТИ С АНИМАЦИЕЙ===
 async def dice_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     user_id = update.effective_user.id

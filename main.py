@@ -2375,7 +2375,63 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "back_to_farm":
         # 🔥 ВЫЗЫВАЕМ ФУНКЦИЮ ФЕРМЫ
         await farm(update, context)
-
+# ========== БОНУС ==========
+async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ежедневный бонус"""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    now = datetime.datetime.now()
+    
+    # Проверяем время последнего бонуса
+    if user.get('last_bonus'):
+        last_bonus = datetime.datetime.fromisoformat(user['last_bonus'])
+        hours_since = (now - last_bonus).total_seconds() / 3600
+        
+        if hours_since < 1:
+            minutes_left = int(60 - (hours_since * 60))
+            await update.message.reply_text(
+                f"⏳ <b>Бонус уже получен</b>\n\n"
+                f"🕐 Следующий через: {minutes_left} минут\n"
+                f"🎁 Уровень {user['level']} бонус: {format_number(50000 + (user['level'] - 1) * 25000)} $",
+                parse_mode=ParseMode.HTML
+            )
+            return
+    
+    # Выдаем бонус
+    bonus_amount = 50000 + (user['level'] - 1) * 25000
+    user['balance'] += bonus_amount
+    user['last_bonus'] = now.isoformat()
+    
+    # Увеличиваем серию
+    streak = user.get('bonus_streak', 0) + 1
+    user['bonus_streak'] = streak
+    
+    # Дополнительный бонус за серию
+    extra_bonus = 0
+    if streak % 7 == 0:  # Каждые 7 дней
+        extra_bonus = bonus_amount * 2
+        user['balance'] += extra_bonus
+    
+    # Добавляем опыт
+    if add_exp(user_id):
+        await update.message.reply_text(
+            f"⭐ Поздравляем! Вы повысили уровень до {user['level']}!\n"
+            f"🎁 Бонус за уровень: {format_number(50000 + (user['level'] - 1) * 25000)} $"
+        )
+    
+    await update.message.reply_text(
+        f"🎁 <b>Бонус получен!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Основной бонус: {format_number(bonus_amount)} $\n"
+        f"{f'🎉 Дополнительный за серию: {format_number(extra_bonus)} $' if extra_bonus > 0 else ''}\n"
+        f"🔥 Серия: {streak} дней\n"
+        f"⭐ Уровень: {user['level']}\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"💰 Баланс: {format_number(user['balance'])} $",
+        parse_mode=ParseMode.HTML
+    )
+    
 # ========== ГЛАВНЫЙ ЗАПУСК ДЛЯ RENDER ==========
 def main() -> None:
     """Запуск бота для Render.com"""
@@ -2432,7 +2488,7 @@ def main() -> None:
         # Экономика
         app.add_handler(CommandHandler("work", work))
         app.add_handler(CommandHandler("farm", farm))
-        app.add_handler(CommandHandler("bonus", daily_bonus))
+        app.add_handler(CommandHandler("bonus", bonus))
         app.add_handler(CommandHandler("bank", bank))
         app.add_handler(CommandHandler("transfer", transfer))
         app.add_handler(CommandHandler("shop", shop))

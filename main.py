@@ -2742,7 +2742,6 @@ def main() -> None:
         app.add_handler(CallbackQueryHandler(mines_handler, pattern="^mines_"))
         app.add_handler(CallbackQueryHandler(diamonds_handler, pattern="^diamonds_"))
         app.add_handler(CallbackQueryHandler(crash_handler, pattern="^crash_"))
-        app.add_handler(CallbackQueryHandler(farm_handler, pattern="^farm_"))
         app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
         
         # Обработчик русских команд без /

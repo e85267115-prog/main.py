@@ -2396,88 +2396,7 @@ async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML
     )
     
-# ========== ГЛАВНЫЙ ЗАПУСК ДЛЯ RENDER ==========
-def main() -> None:
-    """Запуск бота для Render.com"""
-def main() -> None:
-    """Запуск бота для Render.com"""
-    print("=" * 50)
-    print("🚀 Vibe Bet Bot запускается на Render.com")
-    print("=" * 50)
-    
-    # Получаем порт от Render (важно!)
-    port = int(os.environ.get("PORT", 8443))
-    print(f"📡 Порт: {port}")
-    
-    # Проверка токена
-    TOKEN = os.getenv("TOKEN")
-    if not TOKEN:
-        print("❌ КРИТИЧЕСКАЯ ОШИБКА: Токен не найден!")
-        print("Добавьте переменную TOKEN в Render:")
-        print("1. Dashboard -> Your Service -> Environment")
-        print("2. Add Environment Variable: Key=TOKEN, Value=ваш_токен")
-        print("3. Manual Deploy -> Clear build cache & deploy")
-        return
-    
-    print(f"✅ Токен получен: {TOKEN[:10]}...")
-    
-    try:
-        # Создаем приложение с увеличенными таймаутами для Render
-        request = HTTPXRequest(
-            connect_timeout=60.0,
-            read_timeout=60.0,
-            write_timeout=60.0,
-        )
-        
-        app = Application.builder().token(TOKEN).request(request).build()
-        
-        # ========== РЕГИСТРАЦИЯ ВСЕХ КОМАНД ==========
-        print("📝 Регистрация команд...")
-        
-        # Основные команды
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("profile", profile))
-        app.add_handler(CommandHandler("balance", balance))
-        app.add_handler(CommandHandler("help", help_command))
-        app.add_handler(CommandHandler("top", top_players))
-        
-        # Игры
-        app.add_handler(CommandHandler("roulette", roulette))
-        app.add_handler(CommandHandler("dice", dice_game))
-        app.add_handler(CommandHandler("football", football))
-        app.add_handler(CommandHandler("crash", crash_game))
-        app.add_handler(CommandHandler("diamonds", diamonds_game))
-        app.add_handler(CommandHandler("mines", mines_game))
-        
-        # Экономика
-        app.add_handler(CommandHandler("work", work))
-        app.add_handler(CommandHandler("farm", farm))
-        app.add_handler(CommandHandler("bonus", bonus))
-        app.add_handler(CommandHandler("bank", bank))
-        app.add_handler(CommandHandler("transfer", transfer))
-        app.add_handler(CommandHandler("shop", shop))
-        
-        # Промокоды
-        app.add_handler(CommandHandler("promo", promo))
-        app.add_handler(CommandHandler("createpromo", create_promo))
-        
-        # Админ команды
-        app.add_handler(CommandHandler("admin", admin))
-        app.add_handler(CommandHandler("hhh", admin_give))
-        app.add_handler(CommandHandler("hhhh", admin_give_btc))
-        app.add_handler(CommandHandler("lvl", admin_level))
-        app.add_handler(CommandHandler("exp", admin_exp))
-        
-        # Обработка callback-запросов (кнопок)
-        app.add_handler(CallbackQueryHandler(button_handler))
-        app.add_handler(CallbackQueryHandler(work_handler, pattern="^work_"))
-        app.add_handler(CallbackQueryHandler(mines_handler, pattern="^mines_"))
-        app.add_handler(CallbackQueryHandler(diamonds_handler, pattern="^diamonds_"))
-        app.add_handler(CallbackQueryHandler(crash_handler, pattern="^crash_"))
-        app.add_handler(CallbackQueryHandler(farm_handler, pattern="^farm_"))
-        app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
-        
-        # ========== ОБРАБОТЧИК РУССКИХ КОМАНД БЕЗ / ==========
+# ========== ОБРАБОТЧИК РУССКИХ КОМАНД БЕЗ / ==========
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений (команды без /)"""
     text = update.message.text.lower().strip()
@@ -2563,7 +2482,89 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🤖 Я не понимаю эту команду.\n"
             "📝 Напиши /help для списка команд."
-    )
+        )
+
+# ========== ГЛАВНЫЙ ЗАПУСК ДЛЯ RENDER ==========
+def main() -> None:
+    """Запуск бота для Render.com"""
+    print("=" * 50)
+    print("🚀 Vibe Bet Bot запускается на Render.com")
+    print("=" * 50)
+    
+    # Получаем порт от Render (важно!)
+    port = int(os.environ.get("PORT", 8443))
+    print(f"📡 Порт: {port}")
+    
+    # Проверка токена
+    TOKEN = os.getenv("TOKEN")
+    if not TOKEN:
+        print("❌ КРИТИЧЕСКАЯ ОШИБКА: Токен не найден!")
+        print("Добавьте переменную TOKEN в Render:")
+        print("1. Dashboard -> Your Service -> Environment")
+        print("2. Add Environment Variable: Key=TOKEN, Value=ваш_токен")
+        print("3. Manual Deploy -> Clear build cache & deploy")
+        return
+    
+    print(f"✅ Токен получен: {TOKEN[:10]}...")
+    
+    try:
+        # Создаем приложение с увеличенными таймаутами для Render
+        request = HTTPXRequest(
+            connect_timeout=60.0,
+            read_timeout=60.0,
+            write_timeout=60.0,
+        )
+        
+        app = Application.builder().token(TOKEN).request(request).build()
+        
+        # ========== РЕГИСТРАЦИЯ ВСЕХ КОМАНД ==========
+        print("📝 Регистрация команд...")
+        
+        # Основные команды
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("profile", profile))
+        app.add_handler(CommandHandler("balance", balance))
+        app.add_handler(CommandHandler("help", help_command))
+        app.add_handler(CommandHandler("top", top_players))
+        
+        # Игры
+        app.add_handler(CommandHandler("roulette", roulette))
+        app.add_handler(CommandHandler("dice", dice_game))
+        app.add_handler(CommandHandler("football", football))
+        app.add_handler(CommandHandler("crash", crash_game))
+        app.add_handler(CommandHandler("diamonds", diamonds_game))
+        app.add_handler(CommandHandler("mines", mines_game))
+        
+        # Экономика
+        app.add_handler(CommandHandler("work", work))
+        app.add_handler(CommandHandler("farm", farm))
+        app.add_handler(CommandHandler("bonus", bonus))
+        app.add_handler(CommandHandler("bank", bank))
+        app.add_handler(CommandHandler("transfer", transfer))
+        app.add_handler(CommandHandler("shop", shop))
+        
+        # Промокоды
+        app.add_handler(CommandHandler("promo", promo))
+        app.add_handler(CommandHandler("createpromo", create_promo))
+        
+        # Админ команды
+        app.add_handler(CommandHandler("admin", admin))
+        app.add_handler(CommandHandler("hhh", admin_give))
+        app.add_handler(CommandHandler("hhhh", admin_give_btc))
+        app.add_handler(CommandHandler("lvl", admin_level))
+        app.add_handler(CommandHandler("exp", admin_exp))
+        
+        # Обработка callback-запросов (кнопок)
+        app.add_handler(CallbackQueryHandler(button_handler))
+        app.add_handler(CallbackQueryHandler(work_handler, pattern="^work_"))
+        app.add_handler(CallbackQueryHandler(mines_handler, pattern="^mines_"))
+        app.add_handler(CallbackQueryHandler(diamonds_handler, pattern="^diamonds_"))
+        app.add_handler(CallbackQueryHandler(crash_handler, pattern="^crash_"))
+        app.add_handler(CallbackQueryHandler(farm_handler, pattern="^farm_"))
+        app.add_handler(CallbackQueryHandler(shop_handler, pattern="^shop_|^back_to_"))
+        
+        # Обработчик русских команд без /
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         
         print("✅ Все обработчики зарегистрированы")
         print("=" * 50)

@@ -2404,5 +2404,14 @@ def main() -> None:
     # Запускаем бота
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-if __name__ == "__main__":
-    main()
+# main.py (временная тестовая версия)
+import os
+print("✅ Бот запускается...")
+
+TOKEN = os.getenv("TOKEN")
+if TOKEN:
+    print(f"✅ Токен получен: {TOKEN[:5]}...")
+    print("🚀 Бот готов к работе!")
+else:
+    print("❌ Токен не найден!")
+    print("Добавьте переменную TOKEN в Railway Variables")

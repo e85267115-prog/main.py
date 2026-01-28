@@ -2530,19 +2530,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif command in ["старт", "start"]:
         await start(update, context)
     
-    # Игры (с аргументами)
-elif command in ["рул", "рулетка"]:
-    await roulette(update, context)
-elif command == "кости":
-    await dice_game(update, context)
-elif command == "футбол":
-    await football(update, context)
-elif command == "краш":  # ← ЭТУ СТРОКУ ДОБАВЬ!
-    await crash(update, context)
-elif command == "алмазы":
-    await diamonds_game(update, context)
-elif command == "мины":
-    await mines_game(update, context)
+ # Игры (с аргументами)
+    elif command in ["рул", "рулетка"]:
+        await roulette(update, context)
+    elif command == "кости":
+        await dice_game(update, context)
+    elif command == "футбол":
+        await football(update, context)
+    elif command == "краш":
+        await crash(update, context)
+    elif command == "алмазы":
+        await diamonds_game(update, context)
+    elif command == "мины":
+        await mines_game(update, context)
     
     # Экономика
     elif command == "работа":

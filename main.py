@@ -99,6 +99,7 @@ def add_exp(user_id):
         user['exp_needed'] += 4
         return True
     return False
+    
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id

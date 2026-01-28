@@ -100,7 +100,9 @@ def add_exp(user_id):
         return True
     return False
     
-    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ← Функция add_exp закончилась, новая функция должна начинаться с того же уровня
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
@@ -119,8 +121,7 @@ def add_exp(user_id):
         f"👇 Для начала подпишись на канал и чат:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.HTML
-    )
-
+        )
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()

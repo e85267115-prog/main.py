@@ -2335,32 +2335,40 @@ async def farm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "back_to_farm":
         
-# ========== ГЛАВНАЯ ФУНКЦИЯ ЗАПУСКА ==========
+# ========== ГЛАВНЫЙ ЗАПУСК ДЛЯ RENDER ==========
 def main() -> None:
-    """Запуск бота - ПОСЛЕ ВСЕХ ФУНКЦИЙ"""
-    print("🚀 Запуск бота Vibe Bet...")
+    """Запуск бота для Render.com"""
+    print("=" * 50)
+    print("🚀 Vibe Bet Bot запускается на Render.com")
+    print("=" * 50)
+    
+    # Получаем порт от Render (важно!)
+    port = int(os.environ.get("PORT", 8443))
+    print(f"📡 Порт: {port}")
     
     # Проверка токена
+    TOKEN = os.getenv("TOKEN")
     if not TOKEN:
-        print("❌ ОШИБКА: Токен не найден!")
-        print("Добавьте переменную TOKEN в Railway:")
-        print("1. Settings → Variables")
-        print("2. New Variable: Name=TOKEN, Value=ваш_токен")
+        print("❌ КРИТИЧЕСКАЯ ОШИБКА: Токен не найден!")
+        print("Добавьте переменную TOKEN в Render:")
+        print("1. Dashboard -> Your Service -> Environment")
+        print("2. Add Environment Variable: Key=TOKEN, Value=ваш_токен")
+        print("3. Manual Deploy -> Clear build cache & deploy")
         return
     
     print(f"✅ Токен получен: {TOKEN[:10]}...")
     
     try:
-        # Создаем приложение
+        # Создаем приложение с увеличенными таймаутами для Render
         request = HTTPXRequest(
-            connect_timeout=30.0,
-            read_timeout=30.0,
-            write_timeout=30.0,
+            connect_timeout=60.0,
+            read_timeout=60.0,
+            write_timeout=60.0,
         )
         
         app = Application.builder().token(TOKEN).request(request).build()
         
-        # ========== РЕГИСТРАЦИЯ ОСНОВНЫХ КОМАНД ==========
+        # ========== РЕГИСТРАЦИЯ ВСЕХ КОМАНД ==========
         print("📝 Регистрация команд...")
         
         # Основные команды
@@ -2368,6 +2376,7 @@ def main() -> None:
         app.add_handler(CommandHandler("profile", profile))
         app.add_handler(CommandHandler("balance", balance))
         app.add_handler(CommandHandler("help", help_command))
+        app.add_handler(CommandHandler("top", top_players))
         
         # Игры
         app.add_handler(CommandHandler("roulette", roulette))
@@ -2410,19 +2419,19 @@ def main() -> None:
         
         print("✅ Все обработчики зарегистрированы")
         print("=" * 50)
-        print("🤖 Бот Vibe Bet успешно запущен!")
+        print("🤖 Бот успешно запущен на Render!")
         print(f"👑 Админы: {ADMIN_IDS}")
-        print(f"📢 Канал: {CHANNEL_USERNAME}")
-        print(f"💬 Чат: {CHAT_USERNAME}")
-        print("=" * 50)
         print("⏳ Ожидание сообщений...")
         print("📞 Отправьте /start в Telegram")
+        print("=" * 50)
         
-        # ЗАПУСК БОТА - БЕСКОНЕЧНЫЙ ЦИКЛ
+        # ЗАПУСК БОТА - polling для Render
         app.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            close_loop=False
+            close_loop=False,
+            poll_interval=1.0,
+            timeout=30
         )
         
     except Exception as e:

@@ -1662,6 +1662,31 @@ async def transfer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Неверный ID получателя!")
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка при переводе: {str(e)}")
+        # ===ФЕРМА===
+async def farm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    keyboard = [
+        [InlineKeyboardButton("🛒 Купить видеокарту (50к $)", callback_data="farm_buy")],
+        [InlineKeyboardButton("💰 Собрать доход", callback_data="farm_collect")]
+    ]
+    
+    text = (
+        f"🖥 <b>Ферма BTC</b>\n\n"
+        f"📊 Видеокарт: {user['farm_cards']}/3\n"
+        f"💰 Доход с карты: 1к $/час\n"
+        f"₿ Шанс на BTC: {user['farm_cards']}%/час\n\n"
+        f"💸 Стоимость карты: 50к $\n\n"
+        f"💰 Баланс: {format_number(user['balance'])} $"
+    )
+    
+    await update.message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
+    
         # ===ПРОМОКОДЫ===
 async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Активация промокода"""

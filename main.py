@@ -1907,69 +1907,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик текстовых сообщений"""
-    text = update.message.text.lower()
-    
-    if text in ["привет", "hi", "hello"]:
-        await update.message.reply_text("👋 Привет! Напиши /start для начала!")
-    elif "купить" in text:
-        await shop(update, context)
-    else:
-        await update.message.reply_text(
-            "🤖 Я не понимаю эту команду.\n"
-            "📝 Напиши <code>помощь</code> для списка команд.",
-            parse_mode="HTML"
-    )
-        async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка текстовых сообщений (русские команды)"""
-    user_id = update.effective_user.id
-    text = update.message.text.strip().lower()
-    
-    # Словарь русских команд
-    russian_commands = {
-        'старт': start,
-        'профиль': profile,
-        'баланс': balance,
-        'помощь': help_command,
-        'топ': top_players,
-        'рулетка': roulette,
-        'рул': roulette,
-        'кости': dice_game,
-        'футбол': football,
-        'краш': crash_game,
-        'алмазы': diamonds_game,
-        'мины': mines_game,
-        'работа': work,
-        'ферма': farm,
-        'бонус': daily_bonus,
-        'банк': bank,
-        'перевести': transfer,
-        'магазин': shop,
-        'промо': promo,
-        'админ': admin,
-    }
-    
-    if text in russian_commands:
-        await russian_commands[text](update, context)
-    else:
-        # Если это не команда, проверяем другие варианты
-        if text.startswith('краш'):
-            # Обработка ставок в краш через текст
-            parts = text.split()
-            if len(parts) >= 2:
-                await crash_game(update, context)
-        elif text.startswith('купить'):
-            await shop(update, context)
-        else:
-            await update.message.reply_text(
-                "🤖 Я не понимаю эту команду.\n"
-                "📝 Напиши /help для списка команд."
-    )
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка текстовых сообщений (русские команды)"""
     user_id = update.effective_user.id
     text = update.message.text.strip().lower()
-    
+
     # Словарь русских команд
     russian_commands = {
         'старт': start,
@@ -1996,34 +1938,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         'hi': start,
         'hello': start,
     }
-    
+
     # Проверяем русские команды
     if text in russian_commands:
         await russian_commands[text](update, context)
-    
     # Обработка ставок в краш через текст
     elif text.startswith('краш'):
         parts = text.split()
         if len(parts) >= 2:
             await crash_game(update, context)
-    
     # Обработка покупок
     elif 'купить' in text:
         await shop(update, context)
-    
-    # Обработка фермы
-    elif text == 'ферма купить' or text == 'купить ферму':
-        await farm(update, context)
-    elif text == 'ферма собрать' or text == 'собрать ферму':
-        await farm_collect(update, context)
-    
     # Если команда не распознана
     else:
         await update.message.reply_text(
             "🤖 Я не понимаю эту команду.\n"
             "📝 Напиши /help для списка команд."
         )
-
 # ========== ЗАПУСК БОТА ==========
 def main() -> None:
     """Запуск бота"""
